@@ -1,0 +1,6 @@
+[submodule "gui_utils"]
+	path = gui_utils
+	url = git@github.com:andsmith/gui_utils
+[submodule "sound_tools"]
+	path = sound_tools
+	url = git@github.com:andsmith/sound_tools
