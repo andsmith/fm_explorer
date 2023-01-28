@@ -38,6 +38,7 @@ class FMExplorerApp(object):
     HELP_BKG = (42, 42, 42, 255)
     HELP_FONT = cv2.FONT_HERSHEY_SIMPLEX
 
+    HELP_OPACITY = None#0.9  # None for less CPU
     TRANSLUCENT = 0.5
     TITLE_OPACITY = 0.25
 
@@ -68,7 +69,7 @@ class FMExplorerApp(object):
         self._help_display = StatusMessages(window_size[::-1],
                                             text_color=FMExplorerApp.HELP_COLOR,
                                             bkg_color=FMExplorerApp.HELP_BKG, fullscreen=True,
-                                            font=FMExplorerApp.HELP_FONT, bkg_alpha=None)
+                                            font=FMExplorerApp.HELP_FONT, bkg_alpha=FMExplorerApp.HELP_OPACITY)
 
         self._help_display.add_msgs(HELP_TEXT, 'help', 0.)
         # init sound & synth
@@ -93,7 +94,7 @@ class FMExplorerApp(object):
                                      draw_props={'cursor_string': "(%.2f Hz, %.2f)"},
                                      param_ranges=[[0, init_carrier_max[0]], [0, init_carrier_max[1]]],
                                      colors=FMExplorerApp.C_GRID_COLORS,
-                                     title='Carrier')
+                                     title='Carrier', adjustability=(True, False))
         self._wave = AnimatedWave(wave_box, wave_func=self._make_wave_samples,
                                   bbox_thickness=2,
                                   wave_color=FMExplorerApp.WAVE_COLOR)
@@ -138,8 +139,9 @@ class FMExplorerApp(object):
 
         self._wave.draw(frame)
         if self._showing_help:
-            #import ipdb; ipdb.set_trace()
-            self._help_display.annotate_img(frame[:,:,:3])
+            # import ipdb; ipdb.set_trace()
+            n_chan = 3 if FMExplorerApp.HELP_OPACITY is None else 4
+            self._help_display.annotate_img(frame[:, :, :n_chan])
 
         return frame
 
