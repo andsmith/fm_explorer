@@ -1,5 +1,5 @@
-HELP_TEXT = ["FM Explorer - find interesting parameters for FM synthesis",
-             '-----------------------------------------------------------',
+HELP_TEXT = ["FM Explorer - find interesting parameters for FM synthesis                     by Andrew T. Smith (2023)",
+             '------------------------------------------------------------------',
              ' ',
              ' ',
              '  FM(t) = A(t) * sin [2 * pi * Fc(t) * t + D(t) * sin(2 * pi * Fm(t) * t)]',
