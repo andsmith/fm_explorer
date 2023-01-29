@@ -89,7 +89,7 @@ class FMExplorerApp(object):
         self._win_name = "FM Explorer"
         self._adjusting_modulation = False  # mode
         # init sound & synth
-        self._fm = FMSynthesizer(carrier_init=carrier_init, modulation_init=modulation_init)
+        self._fm = FMSynthesizer()
 
         # init gui layout & colors
         self._n_waveform_samples = int(FMExplorerApp.SAMPLING_RATE / 20.)
@@ -99,7 +99,7 @@ class FMExplorerApp(object):
         self._blank[:, :, 3] = 255
         h_div_line = int(self._win_size[1] * FMExplorerApp.H_DIV_LINE)
         v_div_line = int(self._win_size[0] * FMExplorerApp.V_DIV_LINE)
-        spectrum_f_range = [0.0, 1000.0]
+        spectrum_f_range, spectrum_p_range = [0.0, 1000.0], (0., 1.)
 
         s = FMExplorerApp.WINDOW_SEPARATION
         self._control_bbox = {'top': s * 2, 'bottom': h_div_line - s,
@@ -124,7 +124,7 @@ class FMExplorerApp(object):
                                                  'title_font_scale': 1., 'cursor_font_scale': .4, 'axis_font_scale': .4,
                                                  'title_thickness': 1, 'show_ticks': (True, False),
                                                  'user_marker': False},
-                                     param_ranges=[spectrum_f_range, [0., 1.]],
+                                     param_ranges=[spectrum_f_range, spectrum_p_range],
                                      colors=FMExplorerApp.S_GRID_COLORS,
                                      title='power spectrum', adjustability=(True, False))
 
@@ -148,52 +148,57 @@ class FMExplorerApp(object):
         self._spectrum = AnimatedSpectrum(self._spectrum_bbox, f_range=spectrum_f_range,
                                           color=FMExplorerApp.SPECTRUM_COLOR)
         self._wave = AnimatedWave(self._wave_bbox, color=FMExplorerApp.WAVE_COLOR)
+        self._update_synth('both')
         self._set_animation_samples()
-
         self._run()
-
-    def _need_to_update_sample(self):
-        """
-        Exclude changing FFT display frequency range, since it doesn't require updating sample
-        """
-        param_set = self._c_grid.get_values() + self._m_grid.get_values()
-        if self._last_param_set is None or self._last_param_set != param_set:
-            self._last_param_set = param_set
-            return True
-        return False
 
     def _set_animation_samples(self):
         samples = self._fm.get_samples(self._n_waveform_samples)[0]
         self._wave.set_samples(samples)
-
         self._spectrum.set_samples(samples)
 
     def _mouse(self, event, x, y, flags, param):
         self._mouse_pos = x, y
 
         # update grids
+        mod_changed, carrier_changed = None, None
         if self._adjusting_modulation:
-            self._m_grid.mouse(event, x, y, flags, param)
+            if self._m_grid.mouse(event, x, y, flags, param):
+                self._update_synth('modulation')
+                mod_changed = True
         else:
-            self._c_grid.mouse(event, x, y, flags, param)
+            if self._c_grid.mouse(event, x, y, flags, param):
+                self._update_synth('carrier')
+                carrier_changed = True
+
         self._s_grid.mouse(event, x, y, flags, param)
         self._w_grid.mouse(event, x, y, flags, param)
 
         # update animations if params changed
-        if self._need_to_update_sample():
+        if mod_changed or carrier_changed:
             self._set_animation_samples()
 
-        # update synth:
+        # update synth params:
         if event == cv2.EVENT_MOUSEMOVE:
-            c_freq, c_amp = self._c_grid.get_values()
-            m_freq, m_depth = self._m_grid.get_values()
-            self._fm.set_params(c_freq=c_freq, c_amp=c_amp, m_freq=m_freq, m_depth=m_depth)
+            self._update_synth('both')
 
         # handle clicks
         if event == cv2.EVENT_LBUTTONDOWN:
             self._start_playing()
         elif event == cv2.EVENT_LBUTTONUP:
             self._stop_playing()
+
+    def _update_synth(self, which='both'):
+        params = {}
+        if which in ['both', 'carrier']:
+            c = self._c_grid.get_values()
+            params.update({'carrier_freq': c[0], 'carrier_amp': c[1]})
+        if which in ['both', 'modulation']:
+            m = self._m_grid.get_values()
+            params.update({'mod_freq': m[0], 'mod_depth': m[1]})
+
+        for param in params:
+            self._fm.set_param(name=param, value=params[param])
 
     def _start_playing(self):
         logging.info("Starting audio.")
@@ -217,7 +222,7 @@ class FMExplorerApp(object):
         self._spectrum.draw(frame)
 
         if self._showing_help:
-            # import ipdb; ipdb.set_trace()
+
             n_chan = 3 if FMExplorerApp.HELP_OPACITY is None else 4
             self._help_display.annotate_img(frame[:, :, :n_chan])
 
@@ -251,12 +256,10 @@ class FMExplorerApp(object):
 
             if self._adjusting_modulation:
                 _ = self._m_grid.keyboard(k)
-                m_freq, m_depth = self._m_grid.get_values()
-                self._fm.set_params(c_freq=None, c_amp=None, m_freq=m_freq, m_depth=m_depth)
+                self._update_synth('modulation')
             else:  # adjusting carrier
                 _ = self._c_grid.keyboard(k)
-                c_freq, c_amp = self._c_grid.get_values()
-                self._fm.set_params(c_freq=c_freq, c_amp=c_amp, m_freq=None, m_depth=None)
+                self._update_synth('carrier')
 
         elif in_bbox(self._wave_bbox, self._mouse_pos):
             # _ = self._w_grid.keyboard(k)  nothing for wave to do

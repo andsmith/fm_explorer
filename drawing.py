@@ -24,6 +24,7 @@ class DataAnimation(metaclass=ABCMeta):
         self._precision_bits = 6
         self._precision_mult = 2 ** self._precision_bits
         self._bbox_height = self._bbox['bottom'] - self._bbox['top']
+        self._bbox_width = self._bbox['right'] - self._bbox['left']
 
     @abstractmethod
     def set_samples(self, samples):
@@ -75,7 +76,9 @@ class AnimatedSpectrum(DataAnimation):
         spectrum=spectrum - np.min(spectrum)
         spectrum_normalized =1.0- spectrum / np.max(spectrum) # flip y
         y_values = spectrum_normalized *  self._bbox_height + self._bbox['top']
-        x_values = np.linspace(self._bbox['left'], self._bbox['right'] - 1, y_values.size)
+        x_values_unit = (self._power_f[f_valid] - self._f_range[0]) / (self._f_range[1]-self._f_range[0])
+        x_values= x_values_unit * self._bbox_width + self._bbox['left']
+
 
         self._coords = (self._precision_mult * np.dstack([x_values, y_values])).reshape(-1, 1, 2).astype(np.int32)
 
