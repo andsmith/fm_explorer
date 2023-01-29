@@ -55,7 +55,7 @@ class FMExplorerApp(object):
 
     C_GRID_COLORS = {'heavy': CARRIER_COLOR,
                      'light': blend_colors(CARRIER_COLOR, BKG_COLOR, TRANSLUCENT).tolist(),
-                     'title': blend_colors(CARRIER_COLOR, BKG_COLOR, TITLE_OPACITY).tolist(),
+                     'title': blend_colors(CARRIER_COLOR, BKG_COLOR, TITLE_OPACITY * 2).tolist(),
                      'bkg': BKG_COLOR}
 
     S_GRID_COLORS = {'heavy': SPECTRUM_COLOR,
@@ -102,12 +102,12 @@ class FMExplorerApp(object):
         spectrum_f_range = [0.0, 1000.0]
 
         s = FMExplorerApp.WINDOW_SEPARATION
-        self._control_bbox = {'top': s*2, 'bottom': h_div_line - s,
-                              'left': s*2, 'right': window_size[0]-s*2}
-        self._wave_bbox = {'top': h_div_line + s, 'bottom': window_size[1]-s*2,
-                           'left': s*2, 'right': v_div_line - s}
-        self._spectrum_bbox = {'top': h_div_line + s, 'bottom': window_size[1]-s*2,
-                               'left': v_div_line + s, 'right': window_size[0]-s*2}
+        self._control_bbox = {'top': s * 2, 'bottom': h_div_line - s,
+                              'left': s * 2, 'right': window_size[0] - s * 2}
+        self._wave_bbox = {'top': h_div_line + s, 'bottom': window_size[1] - s * 2,
+                           'left': s * 2, 'right': v_div_line - s}
+        self._spectrum_bbox = {'top': h_div_line + s, 'bottom': window_size[1] - s * 2,
+                               'left': v_div_line + s, 'right': window_size[0] - s * 2}
 
         self._m_grid = CartesianGrid(self._control_bbox, init_values=modulation_init, axis_labels=('F', 'D'),
                                      draw_props={'cursor_string': "(%.2f Hz, %.2f)"},
@@ -122,14 +122,16 @@ class FMExplorerApp(object):
         self._s_grid = CartesianGrid(self._spectrum_bbox, init_values=(None, None), axis_labels=('F (Hz)', 'log(p)'),
                                      draw_props={'cursor_string': None,
                                                  'title_font_scale': 1., 'cursor_font_scale': .4, 'axis_font_scale': .4,
-                                                 'title_thickness': 1, 'show_ticks': (True, False),'user_marker':False},
+                                                 'title_thickness': 1, 'show_ticks': (True, False),
+                                                 'user_marker': False},
                                      param_ranges=[spectrum_f_range, [0., 1.]],
                                      colors=FMExplorerApp.S_GRID_COLORS,
                                      title='power spectrum', adjustability=(True, False))
 
         self._w_grid = CartesianGrid(self._wave_bbox, init_values=(None, None), axis_labels=('T (sec.)', None),
                                      draw_props={'cursor_string': None, 'title_font_scale': 1.5,
-                                                 'title_thickness': 1, 'show_ticks': (True, False),'user_marker':False},
+                                                 'title_thickness': 1, 'show_ticks': (True, False),
+                                                 'user_marker': False},
                                      param_ranges=[[0., self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE]
                                          , [-.2, 1.2]],
                                      colors=FMExplorerApp.W_GRID_COLORS,
@@ -150,8 +152,11 @@ class FMExplorerApp(object):
 
         self._run()
 
-    def _need_to_update_animations(self):
-        param_set = tuple(self._c_grid.get_values().tolist() + self._m_grid.get_values().tolist())
+    def _need_to_update_sample(self):
+        """
+        Exclude changing FFT display frequency range, since it doesn't require updating sample
+        """
+        param_set = self._c_grid.get_values() + self._m_grid.get_values()
         if self._last_param_set is None or self._last_param_set != param_set:
             self._last_param_set = param_set
             return True
@@ -175,7 +180,7 @@ class FMExplorerApp(object):
         self._w_grid.mouse(event, x, y, flags, param)
 
         # update animations if params changed
-        if self._need_to_update_animations():
+        if self._need_to_update_sample():
             self._set_animation_samples()
 
         # update synth:
@@ -273,11 +278,11 @@ class FMExplorerApp(object):
         # changing number of samples in wave, update grids and animations
         elif k & 0xff == ord(','):
             self._n_waveform_samples = int(self._n_waveform_samples * 0.75)
-            self._w_grid.set_param_range(self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE, 0)
+            self._w_grid.set_param_max(self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE, 0)
             self._set_animation_samples()
         elif k & 0xff == ord('.'):
             self._n_waveform_samples = int(self._n_waveform_samples * 1.25)
-            self._w_grid.set_param_range(self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE, 0)
+            self._w_grid.set_param_max(self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE, 0)
             self._set_animation_samples()
 
         return False
