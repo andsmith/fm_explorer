@@ -122,14 +122,14 @@ class FMExplorerApp(object):
         self._s_grid = CartesianGrid(self._spectrum_bbox, init_values=(None, None), axis_labels=('F (Hz)', 'log(p)'),
                                      draw_props={'cursor_string': None,
                                                  'title_font_scale': 1., 'cursor_font_scale': .4, 'axis_font_scale': .4,
-                                                 'title_thickness': 1, 'show_ticks': (True, False)},
+                                                 'title_thickness': 1, 'show_ticks': (True, False),'user_marker':False},
                                      param_ranges=[spectrum_f_range, [0., 1.]],
                                      colors=FMExplorerApp.S_GRID_COLORS,
                                      title='power spectrum', adjustability=(True, False))
 
-        self._w_grid = CartesianGrid(self._wave_bbox, init_values=(None, None), axis_labels=('T', None),
+        self._w_grid = CartesianGrid(self._wave_bbox, init_values=(None, None), axis_labels=('T (sec.)', None),
                                      draw_props={'cursor_string': None, 'title_font_scale': 1.5,
-                                                 'title_thickness': 1, 'show_ticks': (True, False)},
+                                                 'title_thickness': 1, 'show_ticks': (True, False),'user_marker':False},
                                      param_ranges=[[0., self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE]
                                          , [-.2, 1.2]],
                                      colors=FMExplorerApp.W_GRID_COLORS,
