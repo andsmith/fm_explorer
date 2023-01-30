@@ -90,7 +90,7 @@ class FMExplorerApp(object):
         self._win_size = window_size
         self._win_name = "FM Explorer"
         self._adjusting_modulation = False  # mode
-
+        self._timbre_mode = False
         # init gui layout & colors
         self._n_waveform_samples = int(FMExplorerApp.SAMPLING_RATE / 20.)
 
@@ -104,7 +104,7 @@ class FMExplorerApp(object):
         self._control_bbox = {'top': s * 2, 'bottom': h_div_line - s,
                               'left': s * 2, 'right': window_size[0] - s * 2}
         self._mouse_pos = int((self._control_bbox['left'] + self._control_bbox['right']) / 2), \
-                               int((self._control_bbox['top'] + self._control_bbox['bottom']) / 2)
+                          int((self._control_bbox['top'] + self._control_bbox['bottom']) / 2)
         self._wave_bbox = {'top': h_div_line + s, 'bottom': window_size[1] - s * 2,
                            'left': s * 2, 'right': v_div_line - s}
         self._spectrum_bbox = {'top': h_div_line + s, 'bottom': window_size[1] - s * 2,
@@ -138,7 +138,7 @@ class FMExplorerApp(object):
                                      colors=FMExplorerApp.W_GRID_COLORS,
                                      title='waveform', adjustability=(False, False))
         # give C and M grids initial focus
-        self._c_grid.mouse(cv2.EVENT_MOUSEMOVE, self._mouse_pos[0], self._mouse_pos[1],None, None)
+        self._c_grid.mouse(cv2.EVENT_MOUSEMOVE, self._mouse_pos[0], self._mouse_pos[1], None, None)
         self._m_grid.mouse(cv2.EVENT_MOUSEMOVE, self._mouse_pos[0], self._mouse_pos[1], None, None)
 
         # init sound & synth
@@ -180,10 +180,19 @@ class FMExplorerApp(object):
             if self._m_grid.mouse(event, x, y, flags, param):
                 self._update_synth('modulation')
                 mod_changed = True
-        else:
+        else:  # adjusting carrier
+            old_carrier_freq, _ = self._c_grid.get_values()
+
             if self._c_grid.mouse(event, x, y, flags, param):
                 self._update_synth('carrier')
                 carrier_changed = True
+                if self._timbre_mode:
+                    # Adjust modulation appropriately
+                    new_carrier_freq, _ = self._c_grid.get_values()
+                    mod_freq, mod_depth = self._m_grid.get_values()
+                    new_mod_freq = new_carrier_freq * mod_freq / old_carrier_freq
+                    self._m_grid.move_marker((new_mod_freq, mod_depth))
+                    logging.info("Timbre mode adjusting modulation frequency:  %.4f" % (new_mod_freq, ))
 
         self._s_grid.mouse(event, x, y, flags, param)
         self._w_grid.mouse(event, x, y, flags, param)
@@ -273,6 +282,9 @@ class FMExplorerApp(object):
         # general keystrokes
         if k & 0xff == ord('q'):
             return True
+        elif k & 0xff == ord('t'):
+            self._timbre_mode = not self._timbre_mode
+            logging.info("Timbre mode:  %s" % (self._timbre_mode,))
         elif k & 0xff == ord('h'):
             self._showing_help = not self._showing_help
         elif k & 0xff == ord(' '):
