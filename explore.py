@@ -17,9 +17,9 @@ import time
 from gui_utils.text_annotation import StatusMessages
 from gui_utils.coordinate_grids import CartesianGrid
 from gui_utils.drawing import blend_colors, in_bbox
-from sound_tools import sound
+from sound_tools.sound_player import SoundPlayer, Encoder
 
-from fm_synth import FMSynthesizer
+from sound_tools.fm_synth import FMSynthesizer
 from drawing import AnimatedWave, AnimatedSpectrum
 from instructions import HELP_TEXT
 
@@ -44,7 +44,7 @@ class FMExplorerApp(object):
     SAMPLING_RATE = 44100
     HELP_OPACITY = 0.9  # None for less CPU
     TRANSLUCENT = 0.5
-    TITLE_OPACITY = 0.15
+    TITLE_OPACITY = 0.25
 
     WINDOW_SEPARATION = 5
 
@@ -55,7 +55,7 @@ class FMExplorerApp(object):
 
     C_GRID_COLORS = {'heavy': CARRIER_COLOR,
                      'light': blend_colors(CARRIER_COLOR, BKG_COLOR, TRANSLUCENT).tolist(),
-                     'title': blend_colors(CARRIER_COLOR, BKG_COLOR, TITLE_OPACITY * 2).tolist(),
+                     'title': blend_colors(CARRIER_COLOR, BKG_COLOR, TITLE_OPACITY).tolist(),
                      'bkg': BKG_COLOR}
 
     S_GRID_COLORS = {'heavy': SPECTRUM_COLOR,
@@ -69,41 +69,42 @@ class FMExplorerApp(object):
                      'bkg': BKG_COLOR}
 
     H_DIV_LINE = 0.7  # control and display
-    V_DIV_LINE = 0.6  # wave and spectrum
+    V_DIV_LINE = 0.5  # wave and spectrum
+
+    AUDIO_PARAMS = dict(channels=1, sample_width=2, frame_rate=44100)
 
     def __init__(self, window_size,
                  init_carrier_max=(1000.0, MAX_VOL),
-                 init_modulation_max=(50.0, 100.),
-                 carrier_init=(210., 0.5),
+                 init_modulation_max=(700.0, 45.),
+                 carrier_init=(440., 0.6),
                  modulation_init=(10, 0.)):
         """
         initialize app window
         :param window_size:  Width x height
         """
         # state
+        self._state = FMExplorerAppStates.idle
         self._showing_help = True
-        self._mouse_pos = 0, 0
         self._last_param_set = None  # update animations when this changes
         self._app_t_start = time.perf_counter()
         self._win_size = window_size
         self._win_name = "FM Explorer"
         self._adjusting_modulation = False  # mode
-        # init sound & synth
-        self._fm = FMSynthesizer()
 
         # init gui layout & colors
         self._n_waveform_samples = int(FMExplorerApp.SAMPLING_RATE / 20.)
-        self._waveform_samples = None  # for animations, only update when FM params / window size changes
 
         self._blank = np.zeros((window_size[1], window_size[0], 4), np.uint8)
         self._blank[:, :, 3] = 255
         h_div_line = int(self._win_size[1] * FMExplorerApp.H_DIV_LINE)
         v_div_line = int(self._win_size[0] * FMExplorerApp.V_DIV_LINE)
-        spectrum_f_range, spectrum_p_range = [0.0, 1000.0], (0., 1.)
+        spectrum_f_range, spectrum_p_range = [0.0, 3000.0], (0., 1.)
 
         s = FMExplorerApp.WINDOW_SEPARATION
         self._control_bbox = {'top': s * 2, 'bottom': h_div_line - s,
                               'left': s * 2, 'right': window_size[0] - s * 2}
+        self._mouse_pos = int((self._control_bbox['left'] + self._control_bbox['right']) / 2), \
+                               int((self._control_bbox['top'] + self._control_bbox['bottom']) / 2)
         self._wave_bbox = {'top': h_div_line + s, 'bottom': window_size[1] - s * 2,
                            'left': s * 2, 'right': v_div_line - s}
         self._spectrum_bbox = {'top': h_div_line + s, 'bottom': window_size[1] - s * 2,
@@ -136,6 +137,17 @@ class FMExplorerApp(object):
                                          , [-.2, 1.2]],
                                      colors=FMExplorerApp.W_GRID_COLORS,
                                      title='waveform', adjustability=(False, False))
+        # give C and M grids initial focus
+        self._c_grid.mouse(cv2.EVENT_MOUSEMOVE, self._mouse_pos[0], self._mouse_pos[1],None, None)
+        self._m_grid.mouse(cv2.EVENT_MOUSEMOVE, self._mouse_pos[0], self._mouse_pos[1], None, None)
+
+        # init sound & synth
+        self._encoder = Encoder(FMExplorerApp.AUDIO_PARAMS['sample_width'])
+
+        self._fm = FMSynthesizer(rate=FMExplorerApp.SAMPLING_RATE)
+        self._update_synth('both')
+        self._audio = SoundPlayer(sample_generator=lambda x: self._fm.get_samples(x, encode_func=self._encoder.encode),
+                                  **FMExplorerApp.AUDIO_PARAMS)
 
         # help
         self._help_display = StatusMessages(window_size[::-1],
@@ -150,10 +162,12 @@ class FMExplorerApp(object):
         self._wave = AnimatedWave(self._wave_bbox, color=FMExplorerApp.WAVE_COLOR)
         self._update_synth('both')
         self._set_animation_samples()
+
         self._run()
 
     def _set_animation_samples(self):
-        samples = self._fm.get_samples(self._n_waveform_samples)[0]
+        samples = self._fm.get_samples(self._n_waveform_samples, advance=False)
+
         self._wave.set_samples(samples)
         self._spectrum.set_samples(samples)
 
@@ -182,12 +196,6 @@ class FMExplorerApp(object):
         if event == cv2.EVENT_MOUSEMOVE:
             self._update_synth('both')
 
-        # handle clicks
-        if event == cv2.EVENT_LBUTTONDOWN:
-            self._start_playing()
-        elif event == cv2.EVENT_LBUTTONUP:
-            self._stop_playing()
-
     def _update_synth(self, which='both'):
         params = {}
         if which in ['both', 'carrier']:
@@ -199,12 +207,6 @@ class FMExplorerApp(object):
 
         for param in params:
             self._fm.set_param(name=param, value=params[param])
-
-    def _start_playing(self):
-        logging.info("Starting audio.")
-
-    def _stop_playing(self):
-        logging.info("Stopping audio.")
 
     def _make_frame(self):
         frame = self._blank.copy()
@@ -222,7 +224,6 @@ class FMExplorerApp(object):
         self._spectrum.draw(frame)
 
         if self._showing_help:
-
             n_chan = 3 if FMExplorerApp.HELP_OPACITY is None else 4
             self._help_display.annotate_img(frame[:, :, :n_chan])
 
@@ -248,34 +249,43 @@ class FMExplorerApp(object):
                 logging.info("FPS:  %.3f" % (fps,))
                 n_frames = 0
                 t_start = time.perf_counter()
+        if self._state == FMExplorerAppStates.playing:
+            self._audio.stop()
 
     def _keyboard(self, k):
 
         # send keystroke to appropriate grid
         if in_bbox(self._control_bbox, self._mouse_pos):
-
             if self._adjusting_modulation:
                 _ = self._m_grid.keyboard(k)
                 self._update_synth('modulation')
             else:  # adjusting carrier
                 _ = self._c_grid.keyboard(k)
                 self._update_synth('carrier')
-
         elif in_bbox(self._wave_bbox, self._mouse_pos):
             # _ = self._w_grid.keyboard(k)  nothing for wave to do
             pass
-
         elif in_bbox(self._spectrum_bbox, self._mouse_pos):
             new_param_range = self._s_grid.keyboard(k)  # might change here, update animation
             if new_param_range is not None:
                 self._spectrum.set_f_range(new_param_range[0, :], new_param_range[1, :])
 
+        # general keystrokes
         if k & 0xff == ord('q'):
             return True
-        if k & 0xff == ord('h'):
+        elif k & 0xff == ord('h'):
             self._showing_help = not self._showing_help
-
         elif k & 0xff == ord(' '):
+            if self._state == FMExplorerAppStates.idle:
+                logging.info("Starting sound")
+                self._state = FMExplorerAppStates.playing
+                self._audio.start()
+            else:
+                logging.info("Stopping sound")
+                self._audio.stop()
+                self._fm.reset()
+                self._state = FMExplorerAppStates.idle
+        elif k & 0xff in [ord('m'), ord('c')]:
             self._adjusting_modulation = not self._adjusting_modulation
 
         # changing number of samples in wave, update grids and animations
