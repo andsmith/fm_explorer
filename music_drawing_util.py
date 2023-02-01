@@ -2,7 +2,7 @@ import time
 import os
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
+
 
 
 def add_text(img, text, pos, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, color=(255, 255, 255),
@@ -82,17 +82,6 @@ def make_img_from_color(shape, color, dtype=np.uint8):
     img = np.transpose(img, (1, 2, 0))
     img = np.ascontiguousarray(img)
     return img
-
-
-def draw_box(img, x_span, y_span, color, thickness=1, **kwargs):
-    box_points = np.array([[x_span[0], y_span[0]],
-                           [x_span[1], y_span[0]],
-                           [x_span[1], y_span[1]],
-                           [x_span[0], y_span[1]]])
-    box_points = np.int32([box_points])
-
-    cv2.polylines(img, box_points, isClosed=True, color=color, thickness=thickness,
-                  lineType=cv2.LINE_AA, **kwargs)
 
 
 def rel_to_abs_span(rel_span, abs_len):
@@ -227,7 +216,7 @@ def make_n_colors(n, scale=(.8, .69, .46)):
                         [scale[2] * np.abs(np.sin(color_range))]])
 
     odds = colors[:, 1::2]
-    colors[:,1::2] = odds[::-1]
+    colors[:, 1::2] = odds[::-1]
     colors = colors[:, :-1]
     return colors.T
 
@@ -249,4 +238,6 @@ def show_colors():
 
 
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt  # don't import into app, crashes w/cv2
+
     show_colors()

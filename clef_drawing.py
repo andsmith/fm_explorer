@@ -1,5 +1,7 @@
 import numpy as np
-import matplotlib.pylab as plt
+
+
+
 
 
 def _linterp(a, b, n):
@@ -65,6 +67,7 @@ def make_bass(n=100):
 
 
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt  # don't import into app, crashes w/cv2
     plt.subplot(1, 2, 1)
     pts = make_treble()[0]
     for xy in pts:
