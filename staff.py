@@ -2,11 +2,89 @@
 Basic musical typesetting.
 """
 import logging
-
+from music_drawing_util import eval_ellipse
 from clef_drawing import make_bass, make_treble
-from music_layout import LAYOUT, DEFAULT_COLORS_BGRA
+from music_layout import LAYOUT, DEFAULT_COLORS_BGRA, NOTE_ECCENTRICITY, NOTE_ROTATION_DEG
 import numpy as np
 import cv2
+import time
+
+PRECISION_BITS = 6  # drawing
+
+
+class NoteArea(object):
+    """
+    Draw a note as the mouse cursor
+    """
+
+    def __init__(self, bbox, middle_c_y, space, staff_line_thickness):
+        """
+        Define note drawing params.
+        :param bbox:  bounding box of note area in image, dict with 'top', 'bottom','left','right' and int values
+        :param middle_c_y:  y-value of middle-c (float)
+        :param space:  y-distance between ledger lines (i.e. definition of whole step)
+        :param staff_line_thickness:  note size depends on this to fit exactly between lines (float)
+        """
+
+        # public
+        self.c_y = middle_c_y
+        self.space = space
+        self.halfsteps_to_middle_c = None
+        self.n_ledger_lines = None
+        self.show_middle_ledger_line = False
+        self.amplitude = 0.0
+        self.frequency = 0.0
+
+        self._bbox = bbox
+        self._staff_line_thickness = staff_line_thickness
+        self._set_geom()
+        self._note_pos_xy = None
+
+        self._pushed = False
+
+    def push(self):
+        print('push')
+        self._pushed = True
+
+    def unpush(self):
+        print('unpush')
+        self._pushed = False
+
+    def set_pos(self, x, y):
+        """
+        Set the position of the note on the staff.
+        Determine frequency & amplitude.
+        NOTE:  Clip to bbox
+        """
+        x = np.clip(x, self._bbox['left'], self._bbox['right'])
+        y = np.clip(y, self._bbox['top'], self._bbox['bottom'])
+        self.halfsteps_to_middle_c = (y - self.c_y) / self.space
+        self.n_ledger_lines = int(np.ceil(np.abs(self.halfsteps_to_middle_c) - 5.5))
+        if np.abs(self.halfsteps_to_middle_c) < 5.5:
+            self.n_ledger_lines = 0
+
+        self.show_middle_ledger_line = self.c_y - self.space < \
+                                       y < \
+                                       self.c_y + self.space
+        width = self._bbox['right'] - self._bbox['left']
+        self.amplitude = np.clip((x - self._bbox['left']) / width, 0, 1.0)
+        self.frequency = 2. ** (self.halfsteps_to_middle_c * 2. / 12.)
+
+    def _set_geom(self, n_pts=50):
+        # note shape
+        t = np.linspace(0, np.pi * 2, n_pts)  # increase for better note shape
+        phi_rad = np.deg2rad(NOTE_ROTATION_DEG)
+        h = self.space / 2. - self._staff_line_thickness / 2.  # note half-height
+        self._coords = eval_ellipse(t, NOTE_ECCENTRICITY, phi_rad, h)  # note, slightly off-center
+        self._note_width = np.max(self._coords[:, 0]) - np.min(self._coords[:, 0])
+
+        # stem attachment points, right & left most point of note shape
+        left_most = np.min(self._coords[:, 0])
+        all_lefties = np.where(self._coords[:, 0] == left_most)[0]
+        self._left_attach_pos = np.mean(self._coords[all_lefties, :], axis=0)
+        right_most = np.max(self._coords[:, 0])
+        all_righties = np.where(self._coords[:, 0] == right_most)[0]
+        self._right_attach_pos = np.mean(self._coords[all_righties, :], axis=0)
 
 
 class Staff(object):
@@ -14,8 +92,6 @@ class Staff(object):
     Draw treble & bass staves & clefs.
     Draw crescendo wedge under.
     """
-
-    PRECISION_BITS = 6  # drawing
 
     def __init__(self, bbox, colors=None):
         self._bbox = bbox
@@ -36,26 +112,42 @@ class Staff(object):
         self._set_staff_lines()
         self._set_clef_lines()
         self._set_wedge_lines()
-        self._set_note_lines()
         self._set_text_positions()
 
+        self._note_bbox = {'top': np.max((self._bbox['top'],
+                                          self._middle_c_y - self._space * (5 + LAYOUT['n_max_ledger_lines'][1]))),
+                           'bottom': np.min((self._bbox['bottom'],
+                                             self._middle_c_y + self._space * (5 + LAYOUT['n_max_ledger_lines'][1]))),
+                           'left': self._wedge_left[0],
+                           'right': self._wedge_right[0]}
+        self._note_box_coords = [np.array([[self._note_bbox['left'], self._note_bbox['bottom']],
+                                          [self._note_bbox['left'], self._note_bbox['top']],
+                                          [self._note_bbox['right'], self._note_bbox['top']],
+                                          [self._note_bbox['right'], self._note_bbox['bottom']]],dtype=np.int32)]
+
+        self._note = NoteArea(self._note_bbox, self._middle_c_y, self._space, self._staff_line_thickness)
+
+        self._mouse_pos = None
+        self._button_down = None
+
         # convert all coordinates
-        precision_mult = 2. ** Staff.PRECISION_BITS
+        precision_mult = 2. ** PRECISION_BITS
         for key in self._lines:
             self._lines[key] = [np.int32(coords * precision_mult) for coords in self._lines[key]]
 
     def _set_text_positions(self):
         self._title_thickness = max(1, int(self._staff_line_thickness / 2))
-        self._dynamics_thickness = max(1, self._title_thickness-1)
-        self._title_font_scale = (self._space / 12)
-        self._dynamics_font_scale = (self._space / 21)
+        self._dynamics_thickness = max(1, self._title_thickness - 1)
+        self._title_font_scale = self._space * LAYOUT['title']['font_scale_mult']
+        self._dynamics_font_scale = self._space * LAYOUT['dynamics']['font_scale_mult']
         (w, h), _ = cv2.getTextSize(LAYOUT['title']['txt'], LAYOUT['title']['font'], self._title_font_scale,
                                     self._title_thickness)
         x = int((self._width - w) / 2)
         y = int(self._bbox['top'] + self._space + h)
         self._title_pos = x, y
 
-        (ppp_w, ppp_h), _ = cv2.getTextSize('ppp', LAYOUT['dynamics']['font'], self._dynamics_font_scale, self._dynamics_thickness)
+        (ppp_w, ppp_h), _ = cv2.getTextSize('ppp', LAYOUT['dynamics']['font'], self._dynamics_font_scale,
+                                            self._dynamics_thickness)
         wedge_to_text_space = max(1, int(self._space / 1.5))
         self._ppp_pos = (self._wedge_left[0] - ppp_w - wedge_to_text_space, self._wedge_right[1])
         self._fff_pos = (self._wedge_right[0] + wedge_to_text_space + 3, self._wedge_right[1])
@@ -136,12 +228,8 @@ class Staff(object):
         self._lines[self._normal_line_key].extend([coords * self._space + treble_pos
                                                    for coords, closed in zip(*treble)])
 
-    def _set_note_lines(self):
-        pass
-
     def draw(self, frame, show_box=False):
         frame[self._bbox['top']:self._bbox['bottom'], self._bbox['left']: self._bbox['right'], :] = self._colors['bkg']
-
         # rects
         for rect in self._rects:
             ((i0, i1), (j0, j1)) = rect['coords']
@@ -152,9 +240,9 @@ class Staff(object):
         for line_info in self._lines:
             color, thickness, closed = line_info
             cv2.polylines(frame, self._lines[line_info], closed, color, thickness=int(thickness), lineType=cv2.LINE_AA,
-                          shift=Staff.PRECISION_BITS)
+                          shift=PRECISION_BITS)
 
-        # text
+        # text (slowest?)
 
         cv2.putText(frame, LAYOUT['title']['txt'], self._title_pos, LAYOUT['title']['font'],
                     self._title_font_scale, self._colors['text'], self._title_thickness, cv2.LINE_AA)
@@ -164,6 +252,31 @@ class Staff(object):
         cv2.putText(frame, "fff", self._fff_pos, LAYOUT['dynamics']['font'],
                     self._dynamics_font_scale, self._colors['text'], self._dynamics_thickness, cv2.LINE_AA)
 
+        if show_box:
+            cv2.polylines(frame, self._note_box_coords, True, self._colors['guide_box'], thickness = 2, lineType=cv2.LINE_AA)
+
+    def mouse(self, event, x, y, flags, param):
+        """
+        Set note position to mouse coordinates only if button is down or mouse is in area
+        """
+
+        self._mouse_pos = x, y
+        in_note_area = (self._note_bbox['top'] <= y < self._note_bbox['bottom'] and
+                        self._note_bbox['left'] <= x < self._note_bbox['right'])
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self._button_down = True
+            if in_note_area:
+                self._note.set_pos(x, y)
+                self._note.push()
+
+        elif event == cv2.EVENT_LBUTTONUP:
+            self._button_down = False
+            self._note.unpush()
+        else:
+            if in_note_area or self._button_down:
+                self._note.set_pos(x, y)
+
 
 def test_staff_drawing():
     window_size = (590, 600)
@@ -171,19 +284,17 @@ def test_staff_drawing():
     blank = np.zeros((window_size[1], window_size[0], 4), dtype=np.uint8)
     win_name = "Staff test"
     cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)
-    # cv2.setMouseCallback(win_name, s.mouse)
+    cv2.setMouseCallback(win_name, s.mouse)
     frame = blank.copy()
-    
-    s.draw(frame, show_box=False)
-    cv2.imwrite('test.jpg', frame)
-    return
+
+    t_start = time.perf_counter()
 
     n_frames = 0
-    t_start = time.perf_counter()
+
     while True:
         frame = blank.copy()
-        s.draw(frame, show_guidebox=False)
-        s.draw_note(frame)
+        s.draw(frame, show_box=True)
+        # s.draw_note(frame)
 
         cv2.imshow(win_name, frame)
         k = cv2.waitKey(1)
@@ -194,7 +305,7 @@ def test_staff_drawing():
         if now - t_start > 2:
             print("FPS:  %.3f" % (n_frames / (now - t_start),))
             t_start = now
-            n_frames += 1
+            n_frames = 0
 
 
 if __name__ == "__main__":

@@ -14,8 +14,8 @@ LAYOUT = {'staff_v_span': [.25, .7],  # all dims relative to bbox  (unit)
           'wedge_length': 0.33,
           'title': {'txt': 'Theremin',
                     'font': cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
-                    'font_scale': 2},
+                    'font_scale_mult': 1 / 20},  # times note space
           'dynamics': {'font': cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
-                       'font_scale': 1},
+                       'font_scale_mult': 1 / 35},
           'ledger_line_length_mult': 1.5,
           'n_max_ledger_lines': (5, 5)}  # above and below
