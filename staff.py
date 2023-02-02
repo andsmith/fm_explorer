@@ -17,7 +17,7 @@ class NoteArea(object):
     Draw a note as the mouse cursor
     """
 
-    def __init__(self, bbox, middle_c_y, space, staff_line_thickness):
+    def __init__(self, bbox, middle_c_y, space, staff_line_thickness, colors=None):
         """
         Define note drawing params.
         :param bbox:  bounding box of note area in image, dict with 'top', 'bottom','left','right' and int values
@@ -25,29 +25,38 @@ class NoteArea(object):
         :param space:  y-distance between ledger lines (i.e. definition of whole step)
         :param staff_line_thickness:  note size depends on this to fit exactly between lines (float)
         """
-
-        # public
+        self._colors = colors if colors is not None else DEFAULT_COLORS_BGRA
         self.c_y = middle_c_y
         self.space = space
-        self.halfsteps_to_middle_c = None
-        self.n_ledger_lines = None
+
+        self._autotuning = False
+
+        self._mouse_pos_xy = None
+        self._note_pos_xy = None
+        self._pushed = False
+        self._bbox = bbox
+        self._staff_line_thickness = staff_line_thickness
+        self._note_stem_thickness = int(staff_line_thickness * 1.5)
+
+
+        self._set_geom()
+
+        # derived from position
+        self.steps_to_middle_c = None
         self.show_middle_ledger_line = False
         self.amplitude = 0.0
         self.frequency = 0.0
 
-        self._bbox = bbox
-        self._staff_line_thickness = staff_line_thickness
-        self._set_geom()
-        self._note_pos_xy = None
-
-        self._pushed = False
+    def toggle_autotune(self):
+        self._autotuning = not self._autotuning
+        logging.info("Autotune:  %s" % (self._autotuning,))
 
     def push(self):
-        print('push')
+
         self._pushed = True
 
     def unpush(self):
-        print('unpush')
+
         self._pushed = False
 
     def set_pos(self, x, y):
@@ -58,25 +67,45 @@ class NoteArea(object):
         """
         x = np.clip(x, self._bbox['left'], self._bbox['right'])
         y = np.clip(y, self._bbox['top'], self._bbox['bottom'])
-        self.halfsteps_to_middle_c = (y - self.c_y) / self.space
-        self.n_ledger_lines = int(np.ceil(np.abs(self.halfsteps_to_middle_c) - 5.5))
-        if np.abs(self.halfsteps_to_middle_c) < 5.5:
-            self.n_ledger_lines = 0
+        self._mouse_pos_xy = np.array((x, y))
 
-        self.show_middle_ledger_line = self.c_y - self.space < \
-                                       y < \
-                                       self.c_y + self.space
+        # set position on staff, number of ledger lines
+        self.steps_to_middle_c = (y - self.c_y) / self.space
+        self.n_ledger_lines = int(np.ceil(np.abs(self.steps_to_middle_c) - 5.5))
+        if np.abs(self.steps_to_middle_c) < 5.5:
+            self.n_ledger_lines = 0
+        self.show_middle_ledger_line = np.abs(self.steps_to_middle_c) < 0.49
         width = self._bbox['right'] - self._bbox['left']
+
+        # notestem info
+
+        # if np.abs(self.steps_to_middle_c) > 6.5:
+        # assert self.n_ledger_lines >= 2, "Bad ledger line calc, should have at least two!"
+        # self._stem_length = -(self.steps_to_middle_c) * self.space
+        # else:
+        self._stem_length = 3.5 * self.space * -np.sign(self.steps_to_middle_c)
+
+        # get audio info
         self.amplitude = np.clip((x - self._bbox['left']) / width, 0, 1.0)
-        self.frequency = 2. ** (self.halfsteps_to_middle_c * 2. / 12.)
+        self.frequency = 2. ** (self.steps_to_middle_c * 2. / 12.)
+
+        self._note_pos_xy = self._mouse_pos_xy.copy()
+        self._autotune()
+
+    def _autotune(self):
+        # set note y position backwards from frequency if changing it
+        pass
 
     def _set_geom(self, n_pts=50):
+        width, height = self._bbox['right'] - self._bbox['left'], \
+                        self._bbox['bottom'] - self._bbox['top']
         # note shape
         t = np.linspace(0, np.pi * 2, n_pts)  # increase for better note shape
         phi_rad = np.deg2rad(NOTE_ROTATION_DEG)
         h = self.space / 2. - self._staff_line_thickness / 2.  # note half-height
         self._coords = eval_ellipse(t, NOTE_ECCENTRICITY, phi_rad, h)  # note, slightly off-center
         self._note_width = np.max(self._coords[:, 0]) - np.min(self._coords[:, 0])
+        self._ledger_line_width = self._note_width * 1.5
 
         # stem attachment points, right & left most point of note shape
         left_most = np.min(self._coords[:, 0])
@@ -85,6 +114,38 @@ class NoteArea(object):
         right_most = np.max(self._coords[:, 0])
         all_righties = np.where(self._coords[:, 0] == right_most)[0]
         self._right_attach_pos = np.mean(self._coords[all_righties, :], axis=0)
+
+        # ledger-line locations,
+        self._ledger_y_offsets = np.arange(6, 6 + height / self.space) * self.space
+
+    def draw(self, frame):
+        if self._note_pos_xy is None:
+            return
+
+        # note head and stem
+        note_coords = ((self._coords + self._note_pos_xy) * 2 ** PRECISION_BITS).astype(np.int32)
+        note_attach_pos = self._left_attach_pos+self._note_stem_thickness/2 if self.steps_to_middle_c < 0 else self._right_attach_pos-self._note_stem_thickness/2
+        stem_coords = [self._note_pos_xy + note_attach_pos]
+        stem_coords.append([stem_coords[0][0], stem_coords[0][1] + self._stem_length])
+        stem_coords = (np.array(stem_coords) * 2. ** PRECISION_BITS).astype(np.int32)
+        color = self._colors['notes'] if self._pushed else self._colors['mouse']
+        cv2.fillPoly(frame, [note_coords], color, lineType=cv2.LINE_AA, shift=PRECISION_BITS)
+        cv2.polylines(frame, [stem_coords], True, color, thickness=self._note_stem_thickness, lineType=cv2.LINE_AA,
+                      shift=PRECISION_BITS)
+
+        def _get_ledger_line_at(x, y):
+            return (np.array([[x - self._ledger_line_width / 2, y],
+                       [x + self._ledger_line_width / 2,y ]]) * 2. ** PRECISION_BITS).astype(np.int32)
+
+        ledger_lines = []
+        if self.show_middle_ledger_line:
+            ledger_lines.append(_get_ledger_line_at(self._note_pos_xy[0], self.c_y))
+        direction = np.sign(self.steps_to_middle_c)
+
+        ledger_lines.extend([_get_ledger_line_at(self._note_pos_xy[0], self._ledger_y_offsets[i] * direction + self.c_y)
+                             for i in range(self.n_ledger_lines)])
+        cv2.polylines(frame, ledger_lines, True, color, thickness=self._note_stem_thickness,
+                      lineType=cv2.LINE_AA, shift=PRECISION_BITS)
 
 
 class Staff(object):
@@ -100,7 +161,6 @@ class Staff(object):
         self._height = self._bbox['bottom'] - self._bbox['top']
 
         self._calc_staff_dims()
-        font_scale = 1 + int(self._space / 40)
 
         # save these for fast drawing
         self._normal_line_key = (self._colors['lines'], max(1, int(self._staff_line_thickness - 1)), False)
@@ -120,12 +180,14 @@ class Staff(object):
                                              self._middle_c_y + self._space * (5 + LAYOUT['n_max_ledger_lines'][1]))),
                            'left': self._wedge_left[0],
                            'right': self._wedge_right[0]}
+        # for drawing note area
         self._note_box_coords = [np.array([[self._note_bbox['left'], self._note_bbox['bottom']],
-                                          [self._note_bbox['left'], self._note_bbox['top']],
-                                          [self._note_bbox['right'], self._note_bbox['top']],
-                                          [self._note_bbox['right'], self._note_bbox['bottom']]],dtype=np.int32)]
+                                           [self._note_bbox['left'], self._note_bbox['top']],
+                                           [self._note_bbox['right'], self._note_bbox['top']],
+                                           [self._note_bbox['right'], self._note_bbox['bottom']]], dtype=np.int32)]
 
-        self._note = NoteArea(self._note_bbox, self._middle_c_y, self._space, self._staff_line_thickness)
+        self._note = NoteArea(self._note_bbox, self._middle_c_y, self._space,
+                              self._staff_line_thickness, colors=self._colors)
 
         self._mouse_pos = None
         self._button_down = None
@@ -184,7 +246,6 @@ class Staff(object):
                             'right': staff_bbox_right}
 
         self._staff_line_thickness = int(self._space / 10)
-        self._note_stem_thickness = int(self._staff_line_thickness * 1.5)
 
         self._middle_c_y = ((self._staff_bbox['top'] + self._staff_bbox['bottom']) / 2)  # should make integer?
 
@@ -253,7 +314,10 @@ class Staff(object):
                     self._dynamics_font_scale, self._colors['text'], self._dynamics_thickness, cv2.LINE_AA)
 
         if show_box:
-            cv2.polylines(frame, self._note_box_coords, True, self._colors['guide_box'], thickness = 2, lineType=cv2.LINE_AA)
+            cv2.polylines(frame, self._note_box_coords, True, self._colors['guide_box'], thickness=2,
+                          lineType=cv2.LINE_AA)
+
+        self._note.draw(frame)
 
     def mouse(self, event, x, y, flags, param):
         """
@@ -280,12 +344,11 @@ class Staff(object):
 
 def test_staff_drawing():
     window_size = (590, 600)
-    s = Staff({'top': 50, 'bottom': window_size[1] - 10, 'left': 10, 'right': window_size[0] - 10})
+    s = Staff({'top': 10, 'bottom': window_size[1] - 10, 'left': 10, 'right': window_size[0] - 10})
     blank = np.zeros((window_size[1], window_size[0], 4), dtype=np.uint8)
     win_name = "Staff test"
     cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)
     cv2.setMouseCallback(win_name, s.mouse)
-    frame = blank.copy()
 
     t_start = time.perf_counter()
 
@@ -294,7 +357,6 @@ def test_staff_drawing():
     while True:
         frame = blank.copy()
         s.draw(frame, show_box=True)
-        # s.draw_note(frame)
 
         cv2.imshow(win_name, frame)
         k = cv2.waitKey(1)

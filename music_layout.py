@@ -4,6 +4,7 @@ DEFAULT_COLORS_BGRA = {'bkg': (229, 235, 245, 255),
                        'lines': (3, 7, 9, 255),
                        'text': (3, 7, 9, 255),
                        'notes': (3, 7, 9, 255),
+                       'mouse': (103, 107, 109, 255),
                        'guide_box': (64, 255, 64, 255),
                        'volume': (32, 200, 32, 255)}
 NOTE_ECCENTRICITY = 0.75
