@@ -154,12 +154,12 @@ class FMExplorerApp(object):
 
         # init sound & synth & music
         self._encoder = Encoder(FMExplorerApp.AUDIO_PARAMS['sample_width'])
+        self._staff = Staff(self._control_bbox)
+        self._staff_amp = 1.0  # output volume mulitiplied by this
 
         self._fm = FMSynthesizer(rate=FMExplorerApp.SAMPLING_RATE)
         self._update_synth('both')
-        self._audio = SoundPlayer(sample_generator=lambda x: self._fm.get_samples(x, encode_func=self._encoder.encode),
-                                  **FMExplorerApp.AUDIO_PARAMS)
-        self._staff = Staff(self._control_bbox)
+        self._audio = SoundPlayer(sample_generator=self._get_samples, **FMExplorerApp.AUDIO_PARAMS)
 
         # help
         msg_params = dict(
@@ -177,13 +177,22 @@ class FMExplorerApp(object):
         self._spectrum = AnimatedSpectrum(self._spectrum_bbox, f_range=spectrum_f_range,
                                           color=FMExplorerApp.SPECTRUM_COLOR)
         self._wave = AnimatedWave(self._wave_bbox, color=FMExplorerApp.WAVE_COLOR)
-        self._update_synth('both')
         self._set_animation_samples()
 
         self._run()
 
+    def _get_samples(self, n):
+        """
+        Determine next samples to play.
+        won't be called if not self._playing
+        """
+        samples = self._fm.get_samples(n, encode_func=None)
+        if self._state == FMExplorerAppStates.playing_theremin:
+            samples *= self._staff_amp
+        return self._encoder.encode(samples)
+
     def _set_animation_samples(self):
-        samples = self._fm.get_samples(self._n_waveform_samples, advance=False)
+        samples = self._fm.get_plot_samples(self._n_waveform_samples)
 
         self._wave.set_samples(samples)
         self._spectrum.set_samples(samples)
@@ -194,9 +203,10 @@ class FMExplorerApp(object):
         if self._showing_help:
             return
 
-        # update grids
+        # what to do with mouse in each state
         mod_changed, carrier_changed = None, None
         if self._state == FMExplorerAppStates.adjusting_modulation:
+
             if self._m_grid.mouse(event, x, y, flags, param):
                 self._update_synth('modulation')
                 mod_changed = True
@@ -207,25 +217,21 @@ class FMExplorerApp(object):
                 self._update_synth('carrier')
                 carrier_changed = True
                 mod_changed = self._adjust_modulation(old_carrier_freq)
-        elif self._state == FMExplorerAppStates.playing_theremin:
-            staff_state = self._staff.mouse(event, x, y, flags, param)
-            old_carrier_freq, _ = self._c_grid.get_values()
-            if staff_state['pushed']:
 
-                self._c_grid.move_marker((staff_state['frequency'], staff_state['amplitude']))
+        elif self._state == FMExplorerAppStates.playing_theremin:
+
+            staff_state = self._staff.mouse(event, x, y, flags, param)
+            old_carrier_freq, old_carrier_amp = self._c_grid.get_values()
+
+            if staff_state['pushed']:
+                self._staff_amp = staff_state['amplitude']
+                self._c_grid.move_marker((staff_state['frequency'], old_carrier_amp))
                 mod_changed = self._adjust_modulation(old_carrier_freq)
                 carrier_changed = True
 
-                if not self._playing:
-                    logging.info("Starting sound")
-                    self._playing = True
-                    self._audio.start()
             else:
-                if self._playing:
-                    logging.info("Stopping sound")
-                    self._audio.stop()
-                    self._fm.reset()
-                    self._playing = False
+                self._staff_amp = 0.0
+                carrier_changed = True
 
         self._s_grid.mouse(event, x, y, flags, param)
         self._w_grid.mouse(event, x, y, flags, param)
@@ -281,7 +287,10 @@ class FMExplorerApp(object):
         if self._showing_help:
             n_chan = 3 if FMExplorerApp.HELP_OPACITY is None else 4
             self._help_display.annotate_img(frame[:, :, :n_chan])
+
+        # on top
         self._status_display.annotate_img(frame)
+
         return frame
 
     def _run(self):
@@ -325,17 +334,20 @@ class FMExplorerApp(object):
             if new_param_range is not None:
                 self._spectrum.set_f_range(new_param_range[0, :], new_param_range[1, :])
 
+        # change states
         if k & 0xff == ord('c'):
             self._state = FMExplorerAppStates.adjusting_carrier
+
         if k & 0xff == ord('m'):
             self._state = FMExplorerAppStates.adjusting_modulation
         if k & 0xff == ord('t'):
+            self._staff_amp = 0
             self._state = FMExplorerAppStates.playing_theremin
 
         # general keystrokes
         if k & 0xff == ord('q'):
             return True
-        elif k & 0xff == ord('p'):
+        elif k & 0xff == ord('x'):
             self._timbre_mode = not self._timbre_mode
             t_str = "Timbre mode:  %s" % ('ON' if self._timbre_mode else 'OFF',)
             logging.info(t_str)
@@ -350,7 +362,7 @@ class FMExplorerApp(object):
             else:
                 logging.info("Stopping sound")
                 self._audio.stop()
-                self._fm.reset()
+                self._fm.reset_state()
                 self._playing = False
 
         # changing number of samples in wave, update grids and animations
