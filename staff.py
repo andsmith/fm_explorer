@@ -14,7 +14,7 @@ DEFAULT_COLORS_BGRA = {'bkg': (229, 235, 245, 255),
                        'lines': (3, 7, 9, 255),
                        'text': (3, 7, 9, 255),
                        'notes': (3, 7, 9, 255),
-                       'mouse': (103, 107, 109, 255),
+                       'mouse': (170, 170, 170, 255),
                        'guide_box': (64, 255, 64, 255),
                        'volume': (32, 200, 32, 255)}
 NOTE_ECCENTRICITY = 0.75
@@ -30,6 +30,8 @@ LAYOUT = {'staff_v_span': [.25, .7],  # all dims relative to bbox  (unit)
                        'font_scale_mult': 1 / 35},
           'ledger_line_length_mult': 1.5,
           'n_max_ledger_lines': (5, 5)}  # above and below
+
+MIDDLE_C_HZ = 261.625565
 
 
 class NoteArea(object):
@@ -106,17 +108,16 @@ class NoteArea(object):
 
         # get audio info
         self.amplitude = np.clip((x - self._bbox['left']) / width, 0, 1.0)
-        self.frequency = 2. ** (self.steps_to_middle_c * 2. / 12.)
-
+        half_steps_above_middle_c = -2.0 * self.steps_to_middle_c
+        self.frequency = MIDDLE_C_HZ * 2. ** (half_steps_above_middle_c / 12.)
         self._note_pos_xy = self._mouse_pos_xy.copy()
         self._autotune()
 
-
     def _autotune(self):
-        # set note y position backwards from frequency if changing it
+        # update self._note_pos_xy from frequency if changing freq
         pass
 
-    def _set_geom(self, n_pts=50):
+    def _set_geom(self, n_pts=100):
         width, height = self._bbox['right'] - self._bbox['left'], \
                         self._bbox['bottom'] - self._bbox['top']
         # note shape
@@ -311,7 +312,7 @@ class Staff(object):
 
         self._volume_left = np.array((wedge_left_x + self._staff_line_thickness / 2, wedge_y_center))
 
-        self._volume_right_up = np.array((wedge_right_x, wedge_right_ys[0] + self._staff_line_thickness ))
+        self._volume_right_up = np.array((wedge_right_x, wedge_right_ys[0] + self._staff_line_thickness))
         self._volume_right_down = np.array((wedge_right_x, wedge_right_ys[1] - self._staff_line_thickness))
 
     def draw(self, frame, show_box=False):
@@ -322,9 +323,11 @@ class Staff(object):
         if volume is not None and volume > 0 and self._note.pushed:
             # x_right = self
             volume_pts = np.array([self._volume_left,
-                                  self._volume_left*(1.0-volume) + self._volume_right_up * volume,
-                                   self._volume_left*(1.0-volume) + self._volume_right_down*volume]) * 2.** PRECISION_BITS
-            cv2.fillPoly(frame, [volume_pts.astype(np.int32)], self._colors['volume'],lineType=cv2.LINE_AA,shift=PRECISION_BITS)
+                                   self._volume_left * (1.0 - volume) + self._volume_right_up * volume,
+                                   self._volume_left * (
+                                           1.0 - volume) + self._volume_right_down * volume]) * 2. ** PRECISION_BITS
+            cv2.fillPoly(frame, [volume_pts.astype(np.int32)], self._colors['volume'], lineType=cv2.LINE_AA,
+                         shift=PRECISION_BITS)
 
         # rects
         for rect in self._rects:
@@ -357,6 +360,7 @@ class Staff(object):
     def mouse(self, event, x, y, flags, param):
         """
         Set note position to mouse coordinates only if button is down or mouse is in area
+        Return:  {'frequency','amplitude','pushed': is the button down?}
         """
 
         self._mouse_pos = x, y
@@ -376,9 +380,13 @@ class Staff(object):
             if in_note_area or self._button_down:
                 self._note.set_pos(x, y)
 
+        return {'frequency': self._note.frequency,
+                'amplitude': self._note.amplitude,
+                'pushed': self._note.pushed}
+
 
 def test_staff_drawing():
-    window_size = (590, 600)
+    window_size = (590, 800)
     s = Staff({'top': 10, 'bottom': window_size[1] - 10, 'left': 10, 'right': window_size[0] - 10})
     blank = np.zeros((window_size[1], window_size[0], 4), dtype=np.uint8)
     win_name = "Staff test"
@@ -400,7 +408,7 @@ def test_staff_drawing():
         n_frames += 1
         now = time.perf_counter()
         if now - t_start > 2:
-            print("FPS:  %.3f" % (n_frames / (now - t_start),))
+            # print("FPS:  %.3f" % (n_frames / (now - t_start),))
             t_start = now
             n_frames = 0
 
