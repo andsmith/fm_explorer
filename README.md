@@ -31,4 +31,5 @@ Future work:
   * show autotune values on gray note mouseover cursor.
   * voice memory bank
   * hand-tracking control/modulation
-  * Sound ON/OFF indicator...
+  * Sound ON/OFF indicator.
+  * Do more interesting (or "musical") parameters have integer or rational ratios with low denominators between the carrier and modulation frequencies?  These could be made "sticky" on the modulation grid.  Not sure what to do with modulation depth/amplitude though, i.e. which values produce more musical FM parameters...
