@@ -396,4 +396,4 @@ class FMExplorerApp(object):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    FMExplorerApp((640*2, 320*2))
+    FMExplorerApp((900, 700))

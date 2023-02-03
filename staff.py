@@ -25,7 +25,7 @@ LAYOUT = {'staff_v_span': [.25, .7],  # all dims relative to bbox  (unit)
           'wedge_length': 0.33,
           'title': {'txt': 'Theremin',
                     'font': cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
-                    'font_scale_mult': 1 / 20},  # times note space
+                    'font_scale_mult': 1 / 15},  # times note space
           'dynamics': {'font': cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
                        'font_scale_mult': 1 / 35},
           'ledger_line_length_mult': 1.5,
@@ -251,7 +251,7 @@ class Staff(Window):
             self._lines[key] = [np.int32(coords * precision_mult) for coords in self._lines[key]]
 
     def _set_text_positions(self):
-        self._title_thickness = max(2, int(self._staff_line_thickness / 2))
+        self._title_thickness = max(1, int(self._staff_line_thickness / 2))
         self._dynamics_thickness = max(1, self._title_thickness - 1)
         self._title_font_scale = self._space * LAYOUT['title']['font_scale_mult']
         self._dynamics_font_scale = self._space * LAYOUT['dynamics']['font_scale_mult']
