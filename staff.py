@@ -2,7 +2,7 @@
 Basic musical typesetting.
 """
 import logging
-from drawing import eval_ellipse
+from drawing import eval_ellipse, Window
 from clef_drawing import make_bass, make_treble
 from scipy.interpolate import interp1d
 import numpy as np
@@ -69,7 +69,6 @@ class EqualNoteMap(object):
                    freq: Closest chromatic pitch}
         """
         n = np.sum(y < self._note_y_div)
-        c_dist = (y - self._m_y) / self._space / 4
         freq_raw = self._gliss(y)
         freq = self._freqs[n]
 
@@ -202,7 +201,7 @@ class NoteArea(object):
                       lineType=cv2.LINE_AA, shift=PRECISION_BITS)
 
 
-class Staff(object):
+class Staff(Window):
     """
     Draw treble & bass staves & clefs.
     Draw crescendo wedge under.
@@ -258,7 +257,7 @@ class Staff(object):
         self._dynamics_font_scale = self._space * LAYOUT['dynamics']['font_scale_mult']
         (w, h), _ = cv2.getTextSize(LAYOUT['title']['txt'], LAYOUT['title']['font'], self._title_font_scale,
                                     self._title_thickness)
-        x = int((self._width - w) / 2)
+        x = self._bbox['left']+ int((self._width - w) / 2)
         y = int(self._bbox['top'] + self._space + h)
         self._title_pos = x, y
 
@@ -389,6 +388,8 @@ class Staff(object):
                           lineType=cv2.LINE_AA)
 
         self._note.draw(frame)
+    def keyboard(self,k):
+        pass
 
     def mouse(self, event, x, y, flags, param):
         """

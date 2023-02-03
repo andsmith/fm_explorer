@@ -7,7 +7,33 @@ from numpy.fft import fftfreq
 from abc import abstractmethod, ABCMeta
 
 
-class DataAnimation(metaclass=ABCMeta):
+class Window(metaclass=ABCMeta):
+    def __init__(self, bbox):
+        self._bbox = bbox
+
+    @abstractmethod
+    def draw(self, frame):
+        """
+        Draw current state on image Frame (HxWx4) uint8
+        """
+        pass
+
+    @abstractmethod
+    def keyboard(self, k):
+        """
+        Process key pressed when in this window.
+        """
+        pass
+
+    @abstractmethod
+    def mouse(self, event, x, y, flags, param):
+        """
+        Process mouse signals for this window. (cv2 callback)
+        """
+        pass
+
+
+class DataAnimation(Window):
     """
     Generic live display of data
     """
@@ -16,7 +42,7 @@ class DataAnimation(metaclass=ABCMeta):
         """
         :param bbox: dict with 'top','left','right','bottom', where in image to draw animation
         """
-        self._bbox = bbox
+        super(DataAnimation, self).__init__(bbox)
         self._color = color
         self._coords = None
         self._last_params = None
@@ -38,6 +64,12 @@ class DataAnimation(metaclass=ABCMeta):
         Render wave in image.  Params optional, used to avoid re-calculating coords.
         """
         cv2.polylines(image, [self._coords], False, self._color, 1, cv2.LINE_AA, self._precision_bits)
+
+    def keyboard(self, k):
+        pass
+
+    def mouse(self, event, x, y, flags, param):
+        pass
 
 
 class AnimatedSpectrum(DataAnimation):
@@ -69,7 +101,7 @@ class AnimatedSpectrum(DataAnimation):
         Prune spectrum, scale to window
         """
         # first determine frequencies
-        f_valid = np.logical_and(self._power_f >= self._f_range[0], self._power_f <= self._f_range[1])
+        f_valid = np.logical_and(1e-10 + self._power_f >= self._f_range[0], self._power_f <= self._f_range[1])
 
         # apply cutoff and scale
         spectrum = self._log_power[f_valid]

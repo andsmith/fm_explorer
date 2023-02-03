@@ -11,28 +11,24 @@ See http://www.cs.cmu.edu/~music/icm-online/readings/fm-synthesis/index.html
     > python explore.py
 
  2. * Use the mouse to adjust the carrier and modulation controls (freq/amp) of an FM Synthesizer.
-    * Hit SPACE to stop/start sound.
+    * Hit SPACE to stop/start sound (also, mouse-click on the note in theremin mode)
+    * Hit C and T to select carrier/theremin modes.
 
 Help screen:
 
-![FM Explorer - info splash](https://github.com/andsmith/fm_explorer/blob/main/img_help.png)
+![FM Explorer - info splash](https://github.com/andsmith/fm_explorer/blob/main/screen_help.png)
 
-Carrier adjusting:
+Direct Carrier adjusting (& modulation):
 
-![FM Explorer - carrier adjust](https://github.com/andsmith/fm_explorer/blob/main/img_carrier.png)
-
-Modulation adjusting
-
-![FM Explorer - modulation adjust](https://github.com/andsmith/fm_explorer/blob/main/img_mod.png)
+![FM Explorer - carrier adjust](https://github.com/andsmith/fm_explorer/blob/main/screen_carrier.png)
 
 Theremin mode:
 
-NOTE:  Frequencies are inaccurate (see future work)
-
-![res_detect_user_pick](https://github.com/andsmith/fm_explorer/blob/main/img_theremin.png)
+![res_detect_user_pick](https://github.com/andsmith/fm_explorer/blob/main/screen_theremin.png)
 
 
 Future work:
-  * address the B-C and E-F distance difference in musical staff so frequencies are correct (multi-speed mouse cursor?)
-  * hand-tracking control
-  * autotune
+  * show autotune values on gray note mouseover cursor.
+  * voice memory bank
+  * hand-tracking control/modulation
+  * Sound ON/OFF indicator...
