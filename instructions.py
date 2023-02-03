@@ -17,7 +17,7 @@ HELP_TEXT = ["FM Explorer - find interesting parameters for FM synthesis        
              "     ' ' -  Play Sound / Stop Sound",
              ' ',
              "     a  -  toggle autotune (theremin mode only)",
-             "     t  -  toggle Theremin mode / Carrier mode.",
+             "    t,c -  select Theremin mode / Carrier mode.",
              "     x  -  toggle modulation freq scaling to preserve timbre on/off.",
              "     b  -  toggle note-area guid box (theremin mode).",
              "     .  -  FFT window smaller",
