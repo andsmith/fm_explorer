@@ -32,7 +32,7 @@ class FMExplorerAppStates(IntEnum):
 
 
 MAX_VOL = 0.8
-
+QUIET_AMP = 0.0001
 
 class FMExplorerApp(object):
     BKG_COLOR = (20, 20, 20, 255)
@@ -41,7 +41,7 @@ class FMExplorerApp(object):
     WAVE_COLOR = (64, 255, 64, 255)
     SPECTRUM_COLOR = (64, 176, 255, 255)
     HELP_COLOR = (240, 240, 240, 255)
-    HELP_BKG = (42, 42, 42, 255)
+    HELP_BKG = (42, 42, 42, 220)
     STATUS_MSG_BOX_SIZE = 300, 100
     HELP_FONT = cv2.FONT_HERSHEY_SIMPLEX
     SAMPLING_RATE = 44100
@@ -163,9 +163,9 @@ class FMExplorerApp(object):
 
         # help
         msg_params = dict(
-            text_color=FMExplorerApp.HELP_COLOR,
-            bkg_color=FMExplorerApp.HELP_BKG, fullscreen=True,
-            font=FMExplorerApp.HELP_FONT, bkg_alpha=FMExplorerApp.HELP_OPACITY)
+            text_color=FMExplorerApp.HELP_COLOR, v_anchor='both',
+            bkg_color=FMExplorerApp.HELP_BKG, inside_margins=(20, 20), outside_margins=(20, 20),
+            font=FMExplorerApp.HELP_FONT)
         self._help_display = StatusMessages(window_size[::-1], **msg_params)
         self._help_display.add_msgs(HELP_TEXT, 'help', 0.)
 
@@ -178,7 +178,7 @@ class FMExplorerApp(object):
                                           color=FMExplorerApp.SPECTRUM_COLOR)
         self._wave = AnimatedWave(self._wave_bbox, color=FMExplorerApp.WAVE_COLOR)
         self._set_animation_samples()
-
+    
         self._run()
 
     def _set_animation_samples(self):
@@ -217,10 +217,12 @@ class FMExplorerApp(object):
                 # update c-grid with new values
                 self._c_grid.move_marker((staff_state['frequency'], staff_state['amplitude'] * MAX_VOL))
                 mod_changed = self._adjust_modulation(old_carrier_freq)
-
+                carrier_changed = True
             else:
-                self._c_grid.move_marker((old_carrier_freq, 0.0))
-                carrier_changed = old_carrier_amp > 0
+
+                self._c_grid.move_marker((old_carrier_freq, QUIET_AMP))
+                carrier_changed = old_carrier_amp > QUIET_AMP
+
 
         self._s_grid.mouse(event, x, y, flags, param)
         self._w_grid.mouse(event, x, y, flags, param)
@@ -368,4 +370,4 @@ class FMExplorerApp(object):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    FMExplorerApp((640 * 2, 320 * 2))
+    FMExplorerApp((1200, 900))
