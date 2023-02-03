@@ -24,8 +24,8 @@ HELP_TEXT = ["FM Explorer - find interesting parameters for FM synthesis        
              "     ,  -  FFT window larger"
              "     q  -  Quit                           ",
              ' ',
-             '  Mouseover window to adjust axis with hotkeys:',
-             "     0  -  adjust vertical axis range up (some axes are locked)",
+             '   Mouseover window to adjust axis with hotkeys (some are locked):',
+             "     0  -  adjust vertical axis range up",
              "     p  -  adjust vertical axis range down",
              "     ]  -  adjust horizontal axis range up",
              "     [  -  adjust horizontal axis range down",
