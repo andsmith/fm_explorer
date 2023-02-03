@@ -45,7 +45,7 @@ class FMExplorerApp(object):
     STATUS_MSG_BOX_SIZE = 300, 100
     HELP_FONT = cv2.FONT_HERSHEY_SIMPLEX
     SAMPLING_RATE = 44100
-    HELP_OPACITY = 0.9  # = None for less CPU
+    HELP_OPACITY = 0.97  # = None for less CPU
     TRANSLUCENT = 0.5
     TITLE_OPACITY = 0.25
 
@@ -155,11 +155,11 @@ class FMExplorerApp(object):
         # init sound & synth & music
         self._encoder = Encoder(FMExplorerApp.AUDIO_PARAMS['sample_width'])
         self._staff = Staff(self._control_bbox)
-        self._staff_amp = 1.0  # output volume mulitiplied by this
 
         self._fm = FMSynthesizer(rate=FMExplorerApp.SAMPLING_RATE)
         self._update_synth('both')
-        self._audio = SoundPlayer(sample_generator=self._get_samples, **FMExplorerApp.AUDIO_PARAMS)
+        self._audio = SoundPlayer(sample_generator=lambda n: self._fm.get_samples(n, encode_func=self._encoder.encode),
+                                  **FMExplorerApp.AUDIO_PARAMS)
 
         # help
         msg_params = dict(
@@ -180,16 +180,6 @@ class FMExplorerApp(object):
         self._set_animation_samples()
 
         self._run()
-
-    def _get_samples(self, n):
-        """
-        Determine next samples to play.
-        won't be called if not self._playing
-        """
-        samples = self._fm.get_samples(n, encode_func=None)
-        if self._state == FMExplorerAppStates.playing_theremin:
-            samples *= self._staff_amp
-        return self._encoder.encode(samples)
 
     def _set_animation_samples(self):
         samples = self._fm.get_plot_samples(self._n_waveform_samples)
@@ -224,14 +214,13 @@ class FMExplorerApp(object):
             old_carrier_freq, old_carrier_amp = self._c_grid.get_values()
 
             if staff_state['pushed']:
-                self._staff_amp = staff_state['amplitude']
-                self._c_grid.move_marker((staff_state['frequency'], old_carrier_amp))
+                # update c-grid with new values
+                self._c_grid.move_marker((staff_state['frequency'], staff_state['amplitude'] * MAX_VOL))
                 mod_changed = self._adjust_modulation(old_carrier_freq)
-                carrier_changed = True
 
             else:
-                self._staff_amp = 0.0
-                carrier_changed = True
+                self._c_grid.move_marker((old_carrier_freq, 0.0))
+                carrier_changed = old_carrier_amp > 0
 
         self._s_grid.mouse(event, x, y, flags, param)
         self._w_grid.mouse(event, x, y, flags, param)
@@ -341,7 +330,6 @@ class FMExplorerApp(object):
         if k & 0xff == ord('m'):
             self._state = FMExplorerAppStates.adjusting_modulation
         if k & 0xff == ord('t'):
-            self._staff_amp = 0
             self._state = FMExplorerAppStates.playing_theremin
 
         # general keystrokes
@@ -380,4 +368,4 @@ class FMExplorerApp(object):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    FMExplorerApp((1000, 800))
+    FMExplorerApp((640 * 2, 320 * 2))

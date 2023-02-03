@@ -4,7 +4,7 @@ Basic musical typesetting.
 import logging
 from drawing import eval_ellipse
 from clef_drawing import make_bass, make_treble
-
+from scipy.interpolate import interp1d
 import numpy as np
 import cv2
 import time
@@ -34,6 +34,48 @@ LAYOUT = {'staff_v_span': [.25, .7],  # all dims relative to bbox  (unit)
 MIDDLE_C_HZ = 261.625565
 
 
+class EqualNoteMap(object):
+    """
+    Equal Temperament map from pixel location on staff to frequency.
+    Autotune, key signatures happen here.
+    """
+
+    def __init__(self, staff_middle_y, staff_space, middle_c_hz=None, octave_range=(-10, 10)):
+        self._m_y = staff_middle_y
+        self._space = staff_space / 4  # space between A and A# on staff
+        m_c = middle_c_hz if middle_c_hz is not None else MIDDLE_C_HZ
+        self._oct_range = octave_range
+        oct_span = octave_range[1] - octave_range[0]
+        n_notes = oct_span * 12
+
+        # set frequencies of notes
+        self._c_bottom = m_c * 2. ** octave_range[0]
+        self._y_bottom = self._m_y + self._space * 14 * (-octave_range[0])
+        self._freqs = self._c_bottom * 2 ** (np.arange(n_notes) / 12.)  # all valid frequencies
+        self._note_y_pos = self._y_bottom - self._space * np.array([i for i in range(oct_span * 14)
+                                                                    if not (
+                    i % 14 == 6 or i % 14 == 13)])  # skip E-F, B-C gap
+        self._note_y_div = (self._note_y_pos[:-1] + self._note_y_pos[1:]) / 2  # halfway between notes (bin boundaries)
+
+        self._gliss = interp1d(self._note_y_pos, self._freqs)
+
+        self._middle_c_staff_distance = self._m_y - self._y_bottom
+
+    def get_note(self, y):
+        """
+        What note is position Y on the staff?
+        Find the closest two 'proper' notes and interpolate.
+        :returns: freq_raw: frequency determined by mouse
+                   freq: Closest chromatic pitch}
+        """
+        n = np.sum(y < self._note_y_div)
+        c_dist = (y - self._m_y) / self._space / 4
+        freq_raw = self._gliss(y)
+        freq = self._freqs[n]
+
+        return freq_raw, freq
+
+
 class NoteArea(object):
     """
     Draw a note as the mouse cursor
@@ -49,9 +91,10 @@ class NoteArea(object):
         """
         self._colors = colors if colors is not None else DEFAULT_COLORS_BGRA
         self.c_y = middle_c_y
+        self.b_y = middle_c_y * 2. ** (-1. / 12)
+        self.e_y = middle_c_y
+        self.f_y = middle_c_y
         self.space = space
-
-        self._autotuning = False
 
         self._mouse_pos_xy = None
         self._note_pos_xy = None
@@ -61,23 +104,19 @@ class NoteArea(object):
         self._note_stem_thickness = int(staff_line_thickness * 1.5)
 
         self._set_geom()
+        self._map = EqualNoteMap(self.c_y, self.space)
 
         # derived from position
         self.steps_to_middle_c = None
         self.show_middle_ledger_line = False
         self.amplitude = 0.0
         self.frequency = 0.0
-
-    def toggle_autotune(self):
-        self._autotuning = not self._autotuning
-        logging.info("Autotune:  %s" % (self._autotuning,))
+        self.autotune_frequency = 0.0
 
     def push(self):
-
         self.pushed = True
 
     def unpush(self):
-
         self.pushed = False
 
     def set_pos(self, x, y):
@@ -91,7 +130,12 @@ class NoteArea(object):
         self._mouse_pos_xy = np.array((x, y))
 
         # set position on staff, number of ledger lines
-        self.steps_to_middle_c = (y - self.c_y) / self.space
+        self.frequency, self.autotune_frequency = self._map.get_note(y)
+
+        self._note_pos_xy = self._mouse_pos_xy.copy()  # autotune adjust?  ghost note?
+
+        self.steps_to_middle_c = (self._note_pos_xy[1] - self.c_y) / self.space
+
         self.n_ledger_lines = int(np.ceil(np.abs(self.steps_to_middle_c) - 5.5))
         if np.abs(self.steps_to_middle_c) < 5.5:
             self.n_ledger_lines = 0
@@ -99,23 +143,12 @@ class NoteArea(object):
         width = self._bbox['right'] - self._bbox['left']
 
         # notestem info
-
-        # if np.abs(self.steps_to_middle_c) > 6.5:
-        # assert self.n_ledger_lines >= 2, "Bad ledger line calc, should have at least two!"
+        # if np.abs(self.steps_to_middle_c) > 6.5:  # extend to middle line?
         # self._stem_length = -(self.steps_to_middle_c) * self.space
-        # else:
         self._stem_length = 3.5 * self.space * -np.sign(self.steps_to_middle_c)
 
         # get audio info
         self.amplitude = np.clip((x - self._bbox['left']) / width, 0, 1.0)
-        half_steps_above_middle_c = -2.0 * self.steps_to_middle_c
-        self.frequency = MIDDLE_C_HZ * 2. ** (half_steps_above_middle_c / 12.)
-        self._note_pos_xy = self._mouse_pos_xy.copy()
-        self._autotune()
-
-    def _autotune(self):
-        # update self._note_pos_xy from frequency if changing freq
-        pass
 
     def _set_geom(self, n_pts=100):
         width, height = self._bbox['right'] - self._bbox['left'], \
@@ -381,6 +414,7 @@ class Staff(object):
                 self._note.set_pos(x, y)
 
         return {'frequency': self._note.frequency,
+                'autotune_frequency': self._note.autotune_frequency,
                 'amplitude': self._note.amplitude,
                 'pushed': self._note.pushed}
 
