@@ -28,7 +28,7 @@ def make_treble(n=100):
     y.append(np.linspace(y[-1][-1], -2.0, n))
     pts = [np.stack((np.concatenate(x),
                      -np.concatenate(y)), axis=1).reshape(-1, 2)]
-    return pts, [False]
+    return pts, [False],[False]
 
 
 def make_dot(center, rad, n=10):
@@ -63,7 +63,8 @@ def make_bass(n=100):
     pts.append(make_dot((bass_dot_indent_x+clef_indent, -0.5), bass_dot_radius))
     pts.append(make_dot((bass_dot_indent_x+clef_indent, 0.5), bass_dot_radius))
     is_closed = (False, True, True)
-    return pts, is_closed
+    is_filled = (False, True, True)
+    return pts, is_closed, is_filled
 
 
 if __name__ == "__main__":
