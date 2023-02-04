@@ -13,6 +13,11 @@ See http://www.cs.cmu.edu/~music/icm-online/readings/fm-synthesis/index.html
  2. * Use the mouse to adjust the carrier and modulation controls (freq/amp) of an FM Synthesizer.
     * Hit SPACE to stop/start sound (also, mouse-click on the note in theremin mode)
     * Hit C and T to select carrier/theremin modes.
+    * Hit A to cycle through auto-tune modes (in theremin mode), featuring:
+        * None (continuous freuqencies)
+        * Chromatic 
+        * Diatonic
+        * Pentatonic
 
 Help screen:
 
@@ -28,7 +33,6 @@ Theremin mode:
 
 
 Future work:
-  * show autotune values on gray note mouseover cursor.
   * voice memory bank
   * hand-tracking control/modulation
   * Sound ON/OFF indicator...

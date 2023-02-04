@@ -4,10 +4,16 @@ Basic musical typesetting.
 import logging
 from drawing import eval_ellipse, Window
 from clef_drawing import make_bass, make_treble
-from scipy.interpolate import interp1d
+
 import numpy as np
 import cv2
 import time
+
+from note_mapping import EqualNoteMap, DiatonicNoteMap, PentatonicNoteMap
+
+NOTE_MAPS = {'chromatic': EqualNoteMap,
+             'diatonic': DiatonicNoteMap,
+             'pentatonic': PentatonicNoteMap}
 
 PRECISION_BITS = 6  # drawing
 DEFAULT_COLORS_BGRA = {'bkg': (229, 235, 245, 255),
@@ -34,47 +40,6 @@ LAYOUT = {'staff_v_span': [.25, .7],  # all dims relative to bbox  (unit)
 MIDDLE_C_HZ = 261.625565
 
 
-class EqualNoteMap(object):
-    """
-    Equal Temperament map from pixel location on staff to frequency.
-    Autotune, key signatures happen here.
-    """
-
-    def __init__(self, staff_middle_y, staff_space, middle_c_hz=None, octave_range=(-10, 10)):
-        self._m_y = staff_middle_y
-        self._space = staff_space / 4  # space between A and A# on staff
-        m_c = middle_c_hz if middle_c_hz is not None else MIDDLE_C_HZ
-        self._oct_range = octave_range
-        oct_span = octave_range[1] - octave_range[0]
-        n_notes = oct_span * 12
-
-        # set frequencies of notes
-        self._c_bottom = m_c * 2. ** octave_range[0]
-        self._y_bottom = self._m_y + self._space * 14 * (-octave_range[0])
-        self._freqs = self._c_bottom * 2 ** (np.arange(n_notes) / 12.)  # all valid frequencies
-        self._note_y_pos = self._y_bottom - self._space * np.array([i for i in range(oct_span * 14)
-                                                                    if not (
-                    i % 14 == 6 or i % 14 == 13)])  # skip E-F, B-C gap
-        self._note_y_div = (self._note_y_pos[:-1] + self._note_y_pos[1:]) / 2  # halfway between notes (bin boundaries)
-
-        self._gliss = interp1d(self._note_y_pos, self._freqs)
-
-        self._middle_c_staff_distance = self._m_y - self._y_bottom
-
-    def get_note(self, y):
-        """
-        What note is position Y on the staff?
-        Find the closest two 'proper' notes and interpolate.
-        :returns: freq_raw: frequency determined by mouse
-                   freq: Closest chromatic pitch}
-        """
-        n = np.sum(y < self._note_y_div)
-        freq_raw = self._gliss(y)
-        freq = self._freqs[n]
-
-        return freq_raw, freq
-
-
 class NoteArea(object):
     """
     Draw a note as the mouse cursor
@@ -83,6 +48,7 @@ class NoteArea(object):
     def __init__(self, bbox, middle_c_y, space, staff_line_thickness, colors=None):
         """
         Define note drawing params.
+
         :param bbox:  bounding box of note area in image, dict with 'top', 'bottom','left','right' and int values
         :param middle_c_y:  y-value of middle-c (float)
         :param space:  y-distance between ledger lines (i.e. definition of whole step)
@@ -103,7 +69,7 @@ class NoteArea(object):
         self._note_stem_thickness = int(staff_line_thickness * 1.5)
 
         self._set_geom()
-        self._map = EqualNoteMap(self.c_y, self.space)
+        self._maps = {name: NOTE_MAPS[name](self.c_y, self.space) for name in NOTE_MAPS}
 
         # derived from position
         self.steps_to_middle_c = None
@@ -112,13 +78,16 @@ class NoteArea(object):
         self.frequency = 0.0
         self.autotune_frequency = 0.0
 
+    def get_note_maps(self):
+        return [k for k in self._maps]
+
     def push(self):
         self.pushed = True
 
     def unpush(self):
         self.pushed = False
 
-    def set_pos(self, x, y):
+    def set_pos(self, x, y, note_map='chromatic'):
         """
         Set the position of the note on the staff.
         Determine frequency & amplitude.
@@ -129,7 +98,7 @@ class NoteArea(object):
         self._mouse_pos_xy = np.array((x, y))
 
         # set position on staff, number of ledger lines
-        self.frequency, self.autotune_frequency = self._map.get_note(y)
+        self.frequency, self.autotune_frequency = self._maps[note_map].get_note(y)
 
         self._note_pos_xy = self._mouse_pos_xy.copy()  # autotune adjust?  ghost note?
 
@@ -208,7 +177,7 @@ class Staff(Window):
     """
 
     def __init__(self, bbox, colors=None):
-        self._bbox = bbox
+        super(Staff, self).__init__(bbox)
         self._colors = colors if colors is not None else DEFAULT_COLORS_BGRA
         self._width = self._bbox['right'] - self._bbox['left']
         self._height = self._bbox['bottom'] - self._bbox['top']
@@ -241,7 +210,7 @@ class Staff(Window):
 
         self._note = NoteArea(self._note_bbox, self._middle_c_y, self._space,
                               self._staff_line_thickness, colors=self._colors)
-
+        self._note_map_name = self._note.get_note_maps()[0]
         self._mouse_pos = None
         self._button_down = None
 
@@ -257,7 +226,7 @@ class Staff(Window):
         self._dynamics_font_scale = self._space * LAYOUT['dynamics']['font_scale_mult']
         (w, h), _ = cv2.getTextSize(LAYOUT['title']['txt'], LAYOUT['title']['font'], self._title_font_scale,
                                     self._title_thickness)
-        x = self._bbox['left']+ int((self._width - w) / 2)
+        x = self._bbox['left'] + int((self._width - w) / 2)
         y = int(self._bbox['top'] + self._space + h)
         self._title_pos = x, y
 
@@ -388,8 +357,17 @@ class Staff(Window):
                           lineType=cv2.LINE_AA)
 
         self._note.draw(frame)
-    def keyboard(self,k):
+
+    def keyboard(self, k):
         pass
+
+    def set_note_map(self, name):
+        if name not in self._note.get_note_maps():
+            raise Exception("Note map unknown: %s" % (name,))
+        self._note_map_name = name
+
+    def get_note_maps(self):
+        return self._note.get_note_maps()
 
     def mouse(self, event, x, y, flags, param):
         """
@@ -404,7 +382,7 @@ class Staff(Window):
         if event == cv2.EVENT_LBUTTONDOWN:
             self._button_down = True
             if in_note_area:
-                self._note.set_pos(x, y)
+                self._note.set_pos(x, y, self._note_map_name)
                 self._note.push()
 
         elif event == cv2.EVENT_LBUTTONUP:
@@ -412,7 +390,7 @@ class Staff(Window):
             self._note.unpush()
         else:
             if in_note_area or self._button_down:
-                self._note.set_pos(x, y)
+                self._note.set_pos(x, y, self._note_map_name)
 
         return {'frequency': self._note.frequency,
                 'autotune_frequency': self._note.autotune_frequency,
@@ -422,6 +400,7 @@ class Staff(Window):
 
 def test_staff_drawing():
     window_size = (590, 800)
+
     s = Staff({'top': 10, 'bottom': window_size[1] - 10, 'left': 10, 'right': window_size[0] - 10})
     blank = np.zeros((window_size[1], window_size[0], 4), dtype=np.uint8)
     win_name = "Staff test"
@@ -450,4 +429,5 @@ def test_staff_drawing():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    d = DiatonicNoteMap(500, 10)
     test_staff_drawing()

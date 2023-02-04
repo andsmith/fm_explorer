@@ -8,6 +8,7 @@ from abc import abstractmethod, ABCMeta
 
 
 class Window(metaclass=ABCMeta):
+
     def __init__(self, bbox):
         self._bbox = bbox
 

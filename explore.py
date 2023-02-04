@@ -29,7 +29,7 @@ class FMExplorerAppStates(IntEnum):
     adjusting_carrier = 0
     playing_theremin = 1
 
-
+MSG_DURATION_SEC =2.0
 MAX_VOL = 0.8
 QUIET_AMP = 0.0001
 
@@ -90,7 +90,8 @@ class FMExplorerApp(object):
         self._showing_help = False
         self._timbre_mode = False  # change modulation with carrier to preserve timbre
         self._show_box = False  # box around note-area of staff
-        self._autotune = False
+        self._autotune_state = ['off',
+                                'chromatic']  # add list of note map names, rotate list, current is in position[0]
         self._last_window = None
 
         # set self._volume= carrier_amp when switching to theremin mode (where vol = self._volume * car_freq)
@@ -163,6 +164,7 @@ class FMExplorerApp(object):
         # init sound & synth & music
         self._encoder = Encoder(FMExplorerApp.AUDIO_PARAMS['sample_width'])
         self._staff = Staff(self._carrier_box)
+        self._autotune_state = list(set(self._staff.get_note_maps() + self._autotune_state))
 
         # things with a .mouse() method with the cv2 callback params
         self._windows = {'carrier': self._c_grid,
@@ -224,10 +226,10 @@ class FMExplorerApp(object):
             # no one to tell
             return
 
-        if event==cv2.EVENT_LBUTTONUP:
+        if event == cv2.EVENT_LBUTTONUP:
             # send to all windows, should be safe to unpress if they're not traccking a press anyway
             for w in self._windows:
-                self._windows[w].mouse(event,x, y, flags, param)
+                self._windows[w].mouse(event, x, y, flags, param)
 
         # remember to see if changes are made
         old_carrier_freq, old_carrier_amp = self._c_grid.get_values()
@@ -240,7 +242,7 @@ class FMExplorerApp(object):
             if self._last_window == 'staff':
 
                 # set theremin freq
-                if self._autotune:
+                if self._autotune_state[0] != 'off':
                     freq = note_info['autotune_frequency']
                 else:
                     freq = note_info['frequency']
@@ -340,9 +342,12 @@ class FMExplorerApp(object):
             self._c_grid.move_marker((old_carrier_freq, QUIET_AMP))
             self._last_window = None
         if k & 0xff == ord('t'):
+            if self._state != FMExplorerAppStates.playing_theremin:
+                old_carrier_freq, self._volume = self._c_grid.get_values()
+                self._c_grid.move_marker((old_carrier_freq, QUIET_AMP))
+
             self._state = FMExplorerAppStates.playing_theremin
-            old_carrier_freq, self._volume = self._c_grid.get_values()
-            self._c_grid.move_marker((old_carrier_freq, QUIET_AMP))
+
             self._update_synth()
             self._last_window = None
             # send fake mouse event to self
@@ -354,7 +359,7 @@ class FMExplorerApp(object):
             self._timbre_mode = not self._timbre_mode
             t_str = "Timbre mode:  %s" % ('ON' if self._timbre_mode else 'OFF',)
             logging.info(t_str)
-            self._status_display.add_msg(t_str, 'timbre_mode', duration_sec=1.0)
+            self._status_display.add_msg(t_str, 'timbre_mode', duration_sec=MSG_DURATION_SEC)
 
         elif k & 0xff == ord('h'):
             self._showing_help = not self._showing_help
@@ -363,11 +368,14 @@ class FMExplorerApp(object):
             self._show_box = not self._show_box
 
         elif k & 0xff == ord('a'):
-            self._autotune = not self._autotune
-            t_str = "Autotune:  %s" % ('ON' if self._autotune else 'OFF',)
+            self._autotune_state = [self._autotune_state[-1]] + self._autotune_state[:-1]
+            new_state = self._autotune_state[0] if self._autotune_state[0] != 'off' else 'chromatic'
+            self._staff.set_note_map(new_state)
+            t_str = ["Autotune:  %s" % (self._autotune_state[0],)]
+            if self._state == FMExplorerAppStates.adjusting_carrier and self._autotune_state[0] != 'off':
+                t_str += ["(press T for Theremin!)"]
             logging.info(t_str)
-            self._status_display.add_msg(t_str, 'autotune', duration_sec=1.0)
-
+            self._status_display.add_msgs(t_str, 'autotune', duration_sec=MSG_DURATION_SEC)
 
         elif k & 0xff == ord(' '):
             if not self._playing:
