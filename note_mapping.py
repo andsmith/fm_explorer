@@ -85,7 +85,6 @@ class EqualNoteMap(NoteMap):
         allowed = [i for i in range(len(freqs)) if i % 12 in cls.ALLOWED_NOTES]
         return freqs[allowed], note_y_pos[allowed]
 
-
 class DiatonicNoteMap(EqualNoteMap):
     """
     White keys

@@ -10,9 +10,9 @@ import time
 
 from note_mapping import EqualNoteMap, DiatonicNoteMap, PentatonicNoteMap
 
-NOTE_MAPS = {'chromatic': EqualNoteMap,
-             'diatonic': DiatonicNoteMap,
-             'pentatonic': PentatonicNoteMap}
+NOTE_MAPS = {'chromatic mode': EqualNoteMap,
+             'diatonic mode': DiatonicNoteMap,
+             'pentatonic mode': PentatonicNoteMap}
 
 PRECISION_BITS = 6  # drawing
 DEFAULT_COLORS_BGRA = {'bkg': (229, 235, 245, 255),  # None draws much faster
@@ -86,7 +86,7 @@ class NoteArea(object):
     def unpush(self):
         self.pushed = False
 
-    def set_pos(self, x, y, note_map='chromatic'):
+    def set_pos(self, x, y, note_map='chromatic mode'):
         """
         Set the position of the note on the staff.
         Determine frequency & amplitude.
@@ -252,7 +252,7 @@ class Staff(Window):
                             'left': staff_bbox_left,
                             'right': staff_bbox_right}
 
-        self._staff_line_thickness = self._space / 8  # int here?
+        self._staff_line_thickness = max(1, int(self._space / 8))  # int here?
 
         self._middle_c_y = ((self._staff_bbox['top'] + self._staff_bbox['bottom']) / 2)  # should make integer?
 
@@ -328,7 +328,7 @@ class Staff(Window):
     def draw(self, frame, show_box=False):
         if self._colors['bkg'] is not None:
             frame[self._bbox['top']:self._bbox['bottom'],
-                  self._bbox['left']: self._bbox['right'], :] = self._colors['bkg']
+            self._bbox['left']: self._bbox['right'], :] = self._colors['bkg']
         # volume wedge
         volume = self._note.amplitude
         if volume is not None and volume > 0 and self._note.pushed:
@@ -433,7 +433,7 @@ def test_staff_drawing():
     blank = np.zeros((window_size[1], window_size[0], 4), dtype=np.uint8)
     blank[:, :, :] = DEFAULT_COLORS_BGRA['bkg']
 
-    s = Staff({'top': 10, 'bottom': window_size[1] - 10, 'left': 10, 'right': window_size[0] - 10},colors=colors)
+    s = Staff({'top': 10, 'bottom': window_size[1] - 10, 'left': 10, 'right': window_size[0] - 10}, colors=colors)
 
     win_name = "Staff test"
     cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)

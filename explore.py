@@ -90,8 +90,7 @@ class FMExplorerApp(object):
         self._showing_help = False
         self._timbre_mode = False  # change modulation with carrier to preserve timbre
         self._show_box = False  # box around note-area of staff
-        self._autotune_state = ['off',
-                                'chromatic']  # add list of note map names, rotate list, current is in position[0]
+        self._autotune_state = ['off']  # add list of note map names, rotate list, current is in position[0]
         self._last_window = None
 
         # set self._volume= carrier_amp when switching to theremin mode (where vol = self._volume * car_freq)
@@ -369,7 +368,7 @@ class FMExplorerApp(object):
 
         elif k & 0xff == ord('a'):
             self._autotune_state = [self._autotune_state[-1]] + self._autotune_state[:-1]
-            new_state = self._autotune_state[0] if self._autotune_state[0] != 'off' else 'chromatic'
+            new_state = self._autotune_state[0] if self._autotune_state[0] != 'off' else 'chromatic mode'
             self._staff.set_note_map(new_state)
             t_str = ["Autotune:  %s" % (self._autotune_state[0],)]
             if self._state == FMExplorerAppStates.adjusting_carrier and self._autotune_state[0] != 'off':
