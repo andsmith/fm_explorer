@@ -380,10 +380,14 @@ class FMExplorerApp(object):
         elif k & 0xff == ord(' '):
             if not self._playing:
                 logging.info("Starting sound")
+                self._status_display.add_msg("sound ON", 'sound', duration_sec=1.0)
+
                 self._playing = True
                 self._audio.start()
             else:
                 logging.info("Stopping sound")
+                self._status_display.add_msg("sound OFF", 'sound', duration_sec=1.0)
+
                 self._audio.stop()
                 self._fm.reset_state()
                 self._playing = False
