@@ -129,12 +129,13 @@ class FMExplorerApp(object):
                                      draw_props={'cursor_string': "(%.2f Hz, %.2f)"},
                                      param_ranges=[[0, init_modulation_max[0]], [0, init_modulation_max[1]]],
                                      colors=FMExplorerApp.M_GRID_COLORS,
-                                     title='modulation')
+                                     title='modulation', adjustibility=((True, True), (False, True)))
+        
         self._c_grid = CartesianGrid(self._carrier_box, init_values=carrier_init, axis_labels=('F', 'A'),
                                      draw_props={'cursor_string': "(%.2f Hz, %.2f)"},
                                      param_ranges=[[0, init_carrier_max[0]], [0, init_carrier_max[1]]],
                                      colors=FMExplorerApp.C_GRID_COLORS,
-                                     title='carrier', adjustability=(True, False))
+                                     title='carrier', adjustibility=((False,True),(False,False)))
 
         self._s_grid = CartesianGrid(self._spectrum_bbox, init_values=(None, None), axis_labels=('F (Hz)', 'log(p)'),
                                      draw_props={'cursor_string': None,
@@ -144,7 +145,7 @@ class FMExplorerApp(object):
                                                  'user_marker': False},
                                      param_ranges=[spectrum_f_range, spectrum_p_range],
                                      colors=FMExplorerApp.S_GRID_COLORS,
-                                     title='power spectrum', adjustability=(True, False))
+                                     title='power spectrum', adjustibility=((False, True), (False, False)))
 
         self._w_grid = CartesianGrid(self._wave_bbox, init_values=(None, None), axis_labels=('T (sec.)', None),
                                      draw_props={'cursor_string': None, 'title_font_scale': 1.5,
@@ -153,7 +154,7 @@ class FMExplorerApp(object):
                                      param_ranges=[[0., self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE]
                                          , [-.2, 1.2]],
                                      colors=FMExplorerApp.W_GRID_COLORS,
-                                     title='waveform', adjustability=(False, False))
+                                     title='waveform', adjustibility=((False, False),(False, False)))
         # give C and M grids initial focus
         self._mouse_pos = int((self._modulation_box['left'] + self._modulation_box['right']) / 2), \
                           int((self._modulation_box['top'] + self._modulation_box['bottom']) / 2)
@@ -324,11 +325,16 @@ class FMExplorerApp(object):
 
     def _keyboard(self, k):
 
+
         # send keystroke to appropriate grid
         if in_bbox(self._modulation_box, self._mouse_pos):
+
+
             _ = self._m_grid.keyboard(k)
+            
         elif self._state == FMExplorerAppStates.adjusting_carrier and in_bbox(self._carrier_box, self._mouse_pos):
             _ = self._c_grid.keyboard(k)
+            
         elif in_bbox(self._spectrum_bbox, self._mouse_pos):
             new_param_range = self._s_grid.keyboard(k)  # might change here, update animation
             if new_param_range is not None:
@@ -394,12 +400,12 @@ class FMExplorerApp(object):
         # changing number of samples in wave, update grids and animations
         elif k & 0xff == ord(','):
             self._n_waveform_samples = int(self._n_waveform_samples * 0.75)
-            self._w_grid.set_param_max(self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE, 0)
-
+            self._w_grid.set_param_range(0,max_val=self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE)
             self._set_animation_samples()
+            
         elif k & 0xff == ord('.'):
             self._n_waveform_samples = int(self._n_waveform_samples * 1.25)
-            self._w_grid.set_param_max(self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE, 0)
+            self._w_grid.set_param_range(0,max_val=self._n_waveform_samples / FMExplorerApp.SAMPLING_RATE)
             self._set_animation_samples()
 
         return False
