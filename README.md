@@ -23,7 +23,16 @@ Help screen:
 
 ![FM Explorer - info splash](https://github.com/andsmith/fm_explorer/blob/main/screen_help.png)
 
-Direct Carrier adjusting (& modulation):
+Direct Carrier & modulation adjusting:
+
+Drag the sqaure/crosshair to change 
+
+ * the Carrier
+    * x-axis:  frequency
+    * y-axis:  amplitude
+ * the Modulatoin
+    * x-axis:  frequency
+    * y-axis:  depth
 
 ![FM Explorer - carrier adjust](https://github.com/andsmith/fm_explorer/blob/main/screen_carrier.png)
 
